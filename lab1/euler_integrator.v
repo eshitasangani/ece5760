@@ -24,11 +24,11 @@ wire signed [26:0] rho;
 wire signed [26:0] x_i;
 wire signed [26:0] y_i;
 wire signed [26:0] z_i;
-wire signed [26:0] dt;
+wire signed [4:0] dt;
 
 // INITIAL VALUES //
 
-assign dt = 27'b0000000_00000001000000000000;
+assign dt = 5'd8;
 assign x_i = -27'b0000001_00000000000000000000;
 assign y_i = 27'b0000000_00011001100110011001;
 assign z_i = 27'b0011001_00000000000000000000;
@@ -99,7 +99,7 @@ module euler_integrator(
     input  signed [26:0] x_i,
     input  signed [26:0] y_i,
     input  signed [26:0] z_i,
-    input  signed [26:0] dt,
+    input  signed [4:0] dt,
 
     output signed [26:0] x_o,
     output signed [26:0] y_o,
@@ -114,21 +114,16 @@ module euler_integrator(
     //// dx /////////////////////////////////////////
     /////////////////////////////////////////////////
     wire signed [26:0] y_sub_x;
-    wire signed [26:0] dx;
+    wire signed [26:0] x_dt_shift;
     wire signed [26:0] dx_dt;
 
     assign y_sub_x = y - x;
+    assign x_dt_shift = y_sub_x >>> dt;
 
     signed_mult sigma_x_mul (
-        .out(dx),
-        .a(sigma),
-        .b(y_sub_x)
-    );
-
-    signed_mult dx_dt_mul (
         .out(dx_dt),
-        .a(dx),
-        .b(dt)
+        .a(sigma),
+        .b(x_dt_shift)
     );
 
     integrator x_integrator (
@@ -147,24 +142,21 @@ module euler_integrator(
     /////////////////////////////////////////////////
     wire signed [26:0] rho_sub_z;
     wire signed [26:0] x_mul_sub;
-    wire signed [26:0] dy;
+    wire signed [26:0] y_shift_dt0;
+    wire signed [26:0] y_shift_dt1;
     wire signed [26:0] dy_dt;
 
     assign rho_sub_z = rho - z;
+    assign y_shift_dt0 = x >>> dt;
+    assign y_shift_dt1 = y >>> dt;
 
     signed_mult x_mul_sub_mul (
         .out(x_mul_sub),
         .a(rho_sub_z),
-        .b(x)
+        .b(y_shift_dt0)
     );
 
-    assign dy = x_mul_sub - y;
-
-    signed_mult dy_dt_mul (
-        .out(dy_dt),
-        .a(dy),
-        .b(dt)
-    );
+    assign dy_dt = x_mul_sub - y_shift_dt1;
 
     integrator y_integrator (
         .out(y_o),
@@ -181,28 +173,24 @@ module euler_integrator(
     /////////////////////////////////////////////////
     wire signed [26:0] x_y;
     wire signed [26:0] beta_z;
-    wire signed [26:0] dz;
     wire signed [26:0] dz_dt;
+    wire signed [26:0] z_shift_dt;
+
+    assign z_shift_dt = z >>> dt;
 
     signed_mult x_y_mul (
         .out(x_y),
-        .a(x),
+        .a(y_shift_dt0),
         .b(y)
     );
 
     signed_mult beta_z_mul (
         .out(beta_z),
         .a(beta),
-        .b(z)
+        .b(z_shift_dt)
     );
 
-    assign dz = x_y - beta_z;
-
-    signed_mult dz_dt_mul (
-        .out(dz_dt),
-        .a(dz),
-        .b(dt)
-    );
+    assign dz_dt = x_y - beta_z;
 
     integrator z_integrator (
         .out(z_o),
