@@ -31,6 +31,18 @@
 //#define HW_REGS_SPAN        0x00200000 
 #define HW_REGS_SPAN          0x00005000 
 
+#define PIO_CLK_BASE   0x00
+#define PIO_RESET_BASE 0x10
+#define PIO_X_I_BASE   0x20
+#define PIO_Y_I_BASE   0x30
+#define PIO_Z_I_BASE   0x40
+#define PIO_SIGMA_BASE 0x50
+#define PIO_BETA_BASE  0x60
+#define PIO_RHO_BASE   0x70
+#define PIO_X_O_BASE   0x80
+#define PIO_Y_O_BASE   0x90
+#define PIO_Z_O_BASE   0xA0
+
 // graphics primitives
 void VGA_text (int, int, char *);
 void VGA_text_clear();
@@ -41,6 +53,10 @@ void VGA_Vline(int, int, int, short) ;
 void VGA_Hline(int, int, int, short) ;
 void VGA_disc (int, int, int, short);
 void VGA_circle (int, int, int, int);
+// void VGA_xy(float,float);
+// void VGA_yz(float,float);
+// void VGA_xz(float,float);
+
 // 16-bit primary colors
 #define red  (0+(0<<5)+(31<<11))
 #define dark_red (0+(0<<5)+(15<<11))
@@ -64,6 +80,16 @@ int colors[] = {red, dark_red, green, dark_green, blue, dark_blue,
 	*(short *)pixel_ptr = (color);\
 } while(0)
 
+// MACROS FOR FIXED POINT CONVERSION
+
+typedef signed int fix20 ; // 7.20 fixed pt
+
+#define float2fix(a) ((fix20)((a)*1048576.0)) 
+#define fix2float(a) ((double)(a)/1048576.0)
+
+#define int2fix(a) ((fix20)(a << 20))
+#define fix2int(a) ((int)(a >> 20))
+
 // the light weight buss base
 void *h2p_lw_virtual_base;
 
@@ -81,10 +107,37 @@ int fd;
 // measure time
 struct timeval t1, t2;
 double elapsedTime;
-	
+
+
+//  VGA 3D GRAPHING FUNCTIONS // 
+
+// void VGA_xy(float,float) { 
+//     VGA_PIXEL( 160 - (int) (x*4),160 - (int) (y*4),white )
+// }
+// void VGA_yz(float,float) { 
+//     VGA_PIXEL( 160 - (int) (y*4),160 - (int) (z*4),white )
+// }
+// void VGA_xz(float,float) { 
+//     VGA_PIXEL( 160 - (int) (x*4),160 - (int) (z*4),white )
+// }
+
+
 int main(void)
 {
-  	
+  	// === FPGA ===
+    volatile unsigned int *pio_clk_addr   = NULL;
+    volatile unsigned int *pio_reset_addr = NULL;
+    volatile unsigned int *pio_x_i_addr   = NULL;
+    volatile unsigned int *pio_y_i_addr   = NULL;
+    volatile unsigned int *pio_z_i_addr   = NULL;
+    volatile unsigned int *pio_sigma_addr = NULL;
+    volatile unsigned int *pio_beta_addr  = NULL;
+    volatile unsigned int *pio_rho_addr   = NULL;
+    volatile unsigned int *pio_x_o_addr   = NULL;
+    volatile unsigned int *pio_y_o_addr   = NULL;
+    volatile unsigned int *pio_z_o_addr   = NULL;
+
+
 	// === need to mmap: =======================
 	// FPGA_CHAR_BASE
 	// FPGA_ONCHIP_BASE      
@@ -130,6 +183,26 @@ int main(void)
     // Get the address that maps to the FPGA pixel buffer
 	vga_pixel_ptr =(unsigned int *)(vga_pixel_virtual_base);
 
+    // PIO POINTER STUFF
+    // Maps to FPGA registers
+    pio_clk_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CLK_BASE );
+    pio_reset_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_BASE );
+    pio_x_i_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_X_I_BASE );
+    pio_y_i_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_Y_I_BASE );
+    pio_z_i_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_Z_I_BASE );
+    pio_sigma_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_SIGMA_BASE );
+    pio_beta_addr  = (unsigned int *)(h2p_lw_virtual_base +  PIO_BETA_BASE );
+    pio_rho_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_RHO_BASE );
+
+    pio_x_o_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_X_O_BASE );
+    pio_y_o_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_Y_O_BASE );
+    pio_z_o_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_Z_O_BASE );
+
+    // Variables to store outputs from the FPGA
+    fix20 x_o;
+    fix20 y_o;
+    fix20 z_o;
+
 	// ===========================================
 
 	/* create a message to be displayed on the VGA 
@@ -137,7 +210,7 @@ int main(void)
 	char text_top_row[40] = "DE1-SoC ARM/FPGA\0";
 	char text_bottom_row[40] = "Cornell ece5760\0";
 	char text_next[40] = "Graphics primitives\0";
-	char num_string[20], time_string[20] ;
+	char num_string[20], time_string[20], out_string[20] ;
 	char color_index = 0 ;
 	int color_counter = 0 ;
 	
@@ -149,9 +222,10 @@ int main(void)
 	int box_x = 5 ;
 	// position of vertical line primitive
 	int Vline_x = 0;
-    int sin_x = 0;
 	// position of horizontal line primitive
 	int Hline_y = 250;
+
+    int x_coor = 0;
 
 	//VGA_text (34, 1, text_top_row);
 	//VGA_text (34, 2, text_bottom_row);
@@ -168,65 +242,78 @@ int main(void)
 	// G bits 5-10  mask 0x07e0
 	// B bits 0-4   mask 0x001f
 	// so color = B+(G<<5)+(R<<11);
-	
+
+    // reset at the very beginning
+
+    // Initial values to send to fpga 
+    *pio_z_i_addr = int2fix(25);
+    *pio_y_i_addr = float2fix(0.1);
+    *pio_x_i_addr = int2fix(-1);
+
+    *pio_sigma_addr = int2fix(10);
+    *pio_beta_addr = float2fix(8./3.);
+    *pio_rho_addr = int2fix(28);
+
+	*pio_reset_addr = 1;
+    // set the clocks
+    *pio_clk_addr = 1;
+    // usleep(300); // assert reset for 300us
+    *pio_clk_addr = 0;
+    *pio_reset_addr = 0; // deassert reset!
+
 	while(1) 
 	{
 		// start timer
 		gettimeofday(&t1, NULL);
-	
-		//VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
-		// VGA_box(64, 0, 240, 50, blue); // blue box
-		// VGA_box(250, 0, 425, 50, red); // red box
-		// VGA_box(435, 0, 600, 50, green); // green box
-		
-		// cycle thru the colors
-		if (color_index++ == 11) color_index = 0;
-		
-		//void VGA_disc(int x, int y, int r, short pixel_color)
-		// VGA_disc(disc_x, 100, 20, colors[color_index]);
-		// disc_x += 35 ;
-		// if (disc_x > 640) disc_x = 0;
-		
-		// //void VGA_circle(int x, int y, int r, short pixel_color)
-		// VGA_circle(320, 200, circle_x, colors[color_index]);
-		// VGA_circle(320, 200, circle_x+1, colors[color_index]);
-		// circle_x += 2 ;
-		// if (circle_x > 99) circle_x = 0;
-		
-		//void VGA_rect(int x1, int y1, int x2, int y2, short pixel_color)
-		// VGA_rect(10, 478, box_x, 478-box_x, rand()&0xffff);
-		// box_x += 3 ;
-		// if (box_x > 195) box_x = 10;
-		
-		//void VGA_line(int x1, int y1, int x2, int y2, short c)
-		// VGA_line(210+(rand()&0x7f), 350+(rand()&0x7f), 210+(rand()&0x7f), 
-		// 		350+(rand()&0x7f), colors[color_index]);
-		
-		// void VGA_Vline(int x1, int y1, int y2, short pixel_color)
-        VGA_Vline(Vline_x, 0, 300, 0x0000);
-		VGA_Vline(Vline_x, 300-50*sin(Vline_x/(6 * 3.1415)), 300-50*sin(Vline_x/(6 * 3.1415))+1, 0xffff);
-		Vline_x += 1 ;
-        // sin_x += 10;
-      
-		if (Vline_x > 620){
-            Vline_x = 20;
-           // VGA_box (0, 0, 639, 479, 0x0000);
+
+        // set the clocks
+        *pio_clk_addr = 1;
+        *pio_clk_addr = 0;
+
+        // Read from the FPGA!
+        z_o = *pio_z_o_addr;
+        y_o = *pio_y_o_addr;
+        x_o = *pio_x_o_addr;
+
+        sprintf(out_string, "%f", fix2float(z_o));
+		VGA_text (10, 4, out_string);
+
+        // Draw to the VGA!
+        // VGA_PIXEL(col,row,pixel_color);	
+        VGA_Vline(x_coor, 0, 620, 0x0000);
+        VGA_PIXEL(x_coor,(int)(5.*fix2float(x_o) + 100), cyan);	
+        VGA_PIXEL(x_coor,(int)(5.*fix2float(y_o) + 200), magenta);	
+        VGA_PIXEL(x_coor,(int)(5.*fix2float(z_o) + 250), yellow);	
+
+        x_coor += 1;
+
+        if (x_coor > 620){
+            x_coor = 0;
         }
 
+
 		
-		// //void VGA_Hline(int x1, int y1, int x2, short pixel_color)
-		// VGA_Hline(400, Hline_y, 550, rand()&0xffff);
-		// Hline_y += 2 ;
-		// if (Hline_y > 400) Hline_y = 240;
-		
+		// void VGA_Vline(int x1, int y1, int y2, short pixel_color)
+        // clear the column
+        // VGA_Vline(Vline_x, 0, 300, 0x0000);
+        // // draw the sine wave!
+		// VGA_Vline(Vline_x, 300-50*sin(Vline_x/(6 * 3.1415)), 300-50*sin(Vline_x/(6 * 3.1415))+1, 0xffff);
+		// Vline_x += 1 ;
+      
+		// if (Vline_x > 620){
+        //     Vline_x = 20;
+        // }
+
+
 		// stop timer
 		gettimeofday(&t2, NULL);
 		elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000000.0;      // sec to us
 		elapsedTime += (t2.tv_usec - t1.tv_usec) ;   // us 
-		sprintf(time_string, "T = %6.0f uSec  ", elapsedTime);
-		VGA_text (10, 4, time_string);
+		// sprintf(time_string, "T = %6.0f uSec  ", elapsedTime);
+		// VGA_text (10, 4, time_string);
+
 		// set frame rate
-		usleep(17000);
+		usleep(10000);
 		
 	} // end while(1)
 } // end main

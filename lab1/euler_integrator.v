@@ -24,11 +24,8 @@ wire signed [26:0] rho;
 wire signed [26:0] x_i;
 wire signed [26:0] y_i;
 wire signed [26:0] z_i;
-wire signed [4:0] dt;
 
 // INITIAL VALUES //
-
-assign dt = 5'd8;
 assign x_i = -27'b0000001_00000000000000000000;
 assign y_i = 27'b0000000_00011001100110011001;
 assign z_i = 27'b0011001_00000000000000000000;
@@ -81,7 +78,6 @@ euler_integrator DUT (
     .x_i(x_i),
     .y_i(y_i),
     .z_i(z_i),
-    .dt(dt),
     .x_o(x_o),
     .y_o(y_o),
     .z_o(z_o)
@@ -99,7 +95,6 @@ module euler_integrator(
     input  signed [26:0] x_i,
     input  signed [26:0] y_i,
     input  signed [26:0] z_i,
-    input  signed [4:0] dt,
 
     output signed [26:0] x_o,
     output signed [26:0] y_o,
@@ -109,6 +104,9 @@ module euler_integrator(
     wire signed [26:0] x;
     wire signed [26:0] y;
     wire signed [26:0] z;
+    wire signed [4:0]  dt;
+
+    assign dt = 5'd8;
 
     /////////////////////////////////////////////////
     //// dx /////////////////////////////////////////
