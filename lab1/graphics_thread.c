@@ -80,7 +80,7 @@ int colors[] = {red, dark_red, green, dark_green, blue, dark_blue,
 	*(short *)pixel_ptr = (color);\
 } while(0)
 
-// MACROS FOR FIXED POINT CONVERSION // 
+// MACROS FOR FIXED POINT CONVERSION
 
 typedef signed int fix20 ; // 7.20 fixed pt
 
