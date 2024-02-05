@@ -53,9 +53,9 @@ void VGA_Vline(int, int, int, short) ;
 void VGA_Hline(int, int, int, short) ;
 void VGA_disc (int, int, int, short);
 void VGA_circle (int, int, int, int);
-// void VGA_xy(float,float);
-// void VGA_yz(float,float);
-// void VGA_xz(float,float);
+void VGA_xy(float,float);
+void VGA_yz(float,float);
+void VGA_xz(float,float);
 
 // 16-bit primary colors
 #define red  (0+(0<<5)+(31<<11))
@@ -111,15 +111,15 @@ double elapsedTime;
 
 //  VGA 3D GRAPHING FUNCTIONS // 
 
-// void VGA_xy(float,float) { 
-//     VGA_PIXEL( 160 - (int) (x*4),160 - (int) (y*4),white )
-// }
-// void VGA_yz(float,float) { 
-//     VGA_PIXEL( 160 - (int) (y*4),160 - (int) (z*4),white )
-// }
-// void VGA_xz(float,float) { 
-//     VGA_PIXEL( 160 - (int) (x*4),160 - (int) (z*4),white )
-// }
+void VGA_xy(float x,float y) { 
+    VGA_PIXEL((int) (x*4) + 160, (int) (y*4) + 160, cyan );
+}
+void VGA_yz(float y,float z) { 
+    VGA_PIXEL( (int) (y*4) + 420, (int) (z*4) + 60, magenta );
+}
+void VGA_xz(float x,float z) { 
+    VGA_PIXEL( (int) (x*4) + 260, (int) (z*4) + 260, yellow );
+}
 
 
 int main(void)
@@ -238,13 +238,17 @@ int main(void)
 	VGA_text (10, 1, text_top_row);
 	VGA_text (10, 2, text_bottom_row);
 	VGA_text (10, 3, text_next);
-	
-	// R bits 11-15 mask 0xf800
-	// G bits 5-10  mask 0x07e0
-	// B bits 0-4   mask 0x001f
-	// so color = B+(G<<5)+(R<<11);
 
-    // reset at the very beginning
+	sprintf(out_string, "xy");
+	VGA_text (20, 35, out_string);
+	sprintf(out_string, "xz");
+	VGA_text (50, 35, out_string);
+	sprintf(out_string, "yz");
+	VGA_text (30, 55, out_string);
+	
+
+
+
 
     // Initial values to send to fpga 
     *pio_z_i_addr = int2fix(25);
@@ -255,12 +259,18 @@ int main(void)
     *pio_beta_addr = float2fix(8./3.);
     *pio_rho_addr = int2fix(28);
 
+
+	// reset at the very beginning
 	*pio_reset_addr = 1;
+
     // set the clocks
     *pio_clk_addr = 1;
-    // usleep(300); // assert reset for 300us
     *pio_clk_addr = 0;
-    *pio_reset_addr = 0; // deassert reset!
+
+	// deassert reset!
+    *pio_reset_addr = 0; 
+
+
 
 	while(1) 
 	{
@@ -276,15 +286,19 @@ int main(void)
         y_o = *pio_y_o_addr;
         x_o = *pio_x_o_addr;
 
-        sprintf(out_string, "%f", fix2float(z_o));
-		VGA_text (10, 4, out_string);
+
 
         // Draw to the VGA!
         // VGA_PIXEL(col,row,pixel_color);	
-        VGA_Vline(x_coor, 0, 620, 0x0000);
-        VGA_PIXEL(x_coor,(int)(5.*fix2float(x_o) + 100), cyan);	
-        VGA_PIXEL(x_coor,(int)(5.*fix2float(y_o) + 200), magenta);	
-        VGA_PIXEL(x_coor,(int)(5.*fix2float(z_o) + 250), yellow);	
+        // VGA_Vline(x_coor, 0, 620, 0x0000);
+        // VGA_PIXEL(x_coor,(int)(5.*fix2float(x_o) + 100), cyan);	
+        // VGA_PIXEL(x_coor,(int)(5.*fix2float(y_o) + 200), magenta);	
+        // VGA_PIXEL(x_coor,(int)(5.*fix2float(z_o) + 250), yellow);	
+
+
+		VGA_xy(fix2float(x_o), fix2float(y_o));
+		VGA_xz(fix2float(x_o), fix2float(z_o));
+		VGA_yz(fix2float(y_o), fix2float(z_o));
 
         x_coor += 1;
 

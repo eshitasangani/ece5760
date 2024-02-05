@@ -4,29 +4,26 @@
 // module testbench();
 
 //Initialize clocks and index
-initial begin
-    clk_50 = 1'b0;
-    // clk_25 = 1'b0;
-    //testbench_out = 15'd0 ;
-end
+// initial begin
+//     clk_50 = 1'b0;
+//     // clk_25 = 1'b0;
+//     //testbench_out = 15'd0 ;
+// end
 
-//Toggle the clocks
-always begin
-    #10
-    clk_50  = !clk_50;
-end
+// //Toggle the clocks
+// always begin
+//     #10
+//     clk_50  = !clk_50;
+// end
 
-//Intialize and drive signals
-initial begin
-    reset  = 1'b0;
-    #10 
-    reset  = 1'b1;
-    #30
-    reset  = 1'b0;
-end 
-
-
-///// idk if we need the top stuff to run the code??? 
+// //Intialize and drive signals
+// initial begin
+//     reset  = 1'b0;
+//     #10 
+//     reset  = 1'b1;
+//     #30
+//     reset  = 1'b0;
+// end 
 
 
 module DE1_SoC_Computer (

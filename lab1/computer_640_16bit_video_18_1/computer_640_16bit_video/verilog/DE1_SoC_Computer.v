@@ -550,8 +550,8 @@ Computer_System The_System (
 
 euler_integrator euler_integrator_inst (
     .clk   (clk),
-//    .reset (reset),
-	 .reset (~KEY[0]),
+    .reset (reset),
+//	 .reset (~KEY[0]),
     .sigma (sigma[26:0]),
     .beta  (beta[26:0]),
     .rho   (rho[26:0]),
