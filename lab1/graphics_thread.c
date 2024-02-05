@@ -184,7 +184,7 @@ int paused = 0;
 int set = 0;   // what do they wanna change
 int change_speed = 0; // change speed or not? 
 // min speed 
-int speed = 1000;
+int speed = 5000;
 
 ///////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////
@@ -225,8 +225,6 @@ void * draw_thread () {
 
 	while(1) 
 	{
-		// start timer
-		gettimeofday(&t1, NULL); 
 
 		if (!init_rest) { 
 
