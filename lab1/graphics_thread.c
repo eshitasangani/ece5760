@@ -16,7 +16,13 @@
 #include <sys/mman.h>
 #include <sys/time.h> 
 #include <math.h>
-//#include "address_map_arm_brl4.h"
+#include <pthread.h>
+
+#define TRUE 1
+#define FALSE 0
+
+// lock for scanf
+pthread_mutex_t scan_lock = PTHREAD_MUTEX_INITIALIZER;
 
 // video display
 #define SDRAM_BASE            0xC0000000
@@ -43,7 +49,21 @@
 #define PIO_Y_O_BASE   0x90
 #define PIO_Z_O_BASE   0xA0
 
-// graphics primitives
+
+// === FPGA ===
+volatile unsigned int *pio_clk_addr   = NULL;
+volatile unsigned int *pio_reset_addr = NULL;
+volatile unsigned int *pio_x_i_addr   = NULL;
+volatile unsigned int *pio_y_i_addr   = NULL;
+volatile unsigned int *pio_z_i_addr   = NULL;
+volatile unsigned int *pio_sigma_addr = NULL;
+volatile unsigned int *pio_beta_addr  = NULL;
+volatile unsigned int *pio_rho_addr   = NULL;
+volatile unsigned int *pio_x_o_addr   = NULL;
+volatile unsigned int *pio_y_o_addr   = NULL;
+volatile unsigned int *pio_z_o_addr   = NULL;
+
+// graphics primitives functions 
 void VGA_text (int, int, char *);
 void VGA_text_clear();
 void VGA_box (int, int, int, int, short);
@@ -108,6 +128,30 @@ int fd;
 struct timeval t1, t2;
 double elapsedTime;
 
+// drawing varaible s
+// ===========================================
+
+/* create a message to be displayed on the VGA 
+		and LCD displays */
+char text_top_row[40] = "DE1-SoC ARM/FPGA\0";
+char text_bottom_row[40] = "Cornell ece5760\0";
+char text_next[40] = "Graphics primitives\0";
+char num_string[20], time_string[20], out_string[20] ;
+char color_index = 0 ;
+int color_counter = 0 ;
+
+// position of disk primitive
+int disc_x = 0;
+// position of circle primitive
+int circle_x = 0 ;
+// position of box primitive
+int box_x = 5 ;
+// position of vertical line primitive
+int Vline_x = 0;
+// position of horizontal line primitive
+int Hline_y = 250;
+
+int x_coor = 0;
 
 //  VGA 3D GRAPHING FUNCTIONS // 
 
@@ -115,29 +159,184 @@ void VGA_xy(float x,float y) {
     VGA_PIXEL((int) (x*4) + 160, (int) (y*4) + 160, cyan );
 }
 void VGA_yz(float y,float z) { 
-    VGA_PIXEL( (int) (y*4) + 400, (int) (z*4) + 100, magenta );
+    VGA_PIXEL( (int) (y*4) + 420, (int) (z*4) + 60, magenta );
 }
 void VGA_xz(float x,float z) { 
     VGA_PIXEL( (int) (x*4) + 260, (int) (z*4) + 260, yellow );
 }
+///////////////////////////////////////////////////////////////
+// THREADS ////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////
+
+// temp initial values to store
+float temp_x_i = -1;
+float temp_y_i = 0.1;
+float temp_z_i = 25;
+float temp_sigma = 10;
+float temp_beta = 8./3.;
+float temp_rho = 28;
+
+// change reset value via trigger 
+int init_rest = 0; 
+
+// if paused - high
+int paused = 0; 
+int set = 0;   // what do they wanna change
+int change_speed = 0; // change speed or not? 
+// min speed 
+int speed = 1000;
+
+///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////
+// reset thread  // 
+///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////
+void * reset_thread() {
+
+  while (1) {
+  
+    if (init_rest) {
+    
+		// update pio pointers w the initial values 
+		*(pio_x_i_addr) = float2fix(temp_x_i);
+		*(pio_y_i_addr) = float2fix(temp_y_i);
+		*(pio_z_i_addr) = float2fix(temp_z_i);
+		
+		// do the actual reset
+		*(pio_clk_addr) = 0;
+		*(pio_reset_addr) = 0;
+		*(pio_clk_addr) = 1;
+		*(pio_clk_addr) = 0;
+		*(pio_reset_addr) = 1;
+     
+      // clear VGA screen 
+      VGA_box (0, 0, 639, 479, 0x0000);
+      
+      // done initializing
+      init_rest = 0;
+    }
+  }
+}
+
+
+// draw thread 
+
+void * draw_thread () { 
+
+	while(1) 
+	{
+		// start timer
+		gettimeofday(&t1, NULL); 
+
+		if (!init_rest) { 
+
+			// if we arent doing a reset, send posedge of the clk
+			// *(pio_clk_addr) = 1;
+    		// *(pio_clk_addr) = 0;
+
+			if (!paused) { 
+
+				VGA_xy(fix2float(*pio_x_o_addr), fix2float(*pio_y_o_addr));
+				VGA_xz(fix2float(*pio_x_o_addr), fix2float(*pio_z_o_addr));
+				VGA_yz(fix2float(*pio_y_o_addr), fix2float(*pio_z_o_addr));
+
+				// add printing text here 
+
+				sprintf(out_string, "xy");
+				VGA_text (20, 35, out_string);
+				sprintf(out_string, "xz");
+				VGA_text (50, 35, out_string);
+				sprintf(out_string, "yz");
+				VGA_text (30, 55, out_string);
+
+				usleep(speed);
+
+			}
+
+		}
+
+	} 
+
+}
+
+
+// scan thread 
+void * scan_thread () {
+
+	while (1) { 
+		// which category to change
+		// switching case statement 
+
+		printf("0: init, 1: params, 2: speed, 3: pause, 4: clear -- ");
+    	scanf("%i", &set);
+
+		switch ( set ) {
+		
+			case 0:  // changing initial values
+
+				printf("Enter x: ");
+				scanf("%f", &temp_x_i);
+				printf("Enter y: ");
+				scanf("%f", &temp_y_i);
+				printf("Enter z: ");
+				scanf("%f", &temp_z_i);
+				init_rest = 1; // reset
+			
+			break;
+
+			case 1:  // pause or play 
+
+			if (!paused) { 
+				// play t
+				*pio_clk_addr = 0; 
+				*pio_clk_addr = 1;
+			}
+
+			case 2: // change the drawing speed 
+
+				printf("Decrease (0) or Increase (1) speed? ");
+				scanf("%i", &change_speed);
+
+				if (change_speed) { 
+					// need speed cap? 
+					speed = speed - 700;  // less sleep
+				}
+				else { 
+					speed = speed + 700; // add more sleep 
+				}
+
+			break;
+
+			case 3: // change sigma, rho, beta 
+
+				printf("Enter sigma: ");
+				scanf("%f", &temp_sigma);
+				printf("Enter beta: ");
+				scanf("%f", &temp_beta);
+				printf("Enter rho: ");
+				scanf("%f", &temp_rho);
+				*(pio_sigma_addr) = float2fix(temp_sigma);
+				*(pio_beta_addr) = float2fix(temp_beta);
+				*(pio_rho_addr) = float2fix(temp_rho);
+        
+        	break;
+
+			case 4: // clear screen 
+				VGA_box (0, 0, 639, 479, 0x0000);
+
+			break;
+
+		} 
+
+	} 
+
+
+} 
 
 
 int main(void)
 {
-  	// === FPGA ===
-    volatile unsigned int *pio_clk_addr   = NULL;
-    volatile unsigned int *pio_reset_addr = NULL;
-    volatile unsigned int *pio_x_i_addr   = NULL;
-    volatile unsigned int *pio_y_i_addr   = NULL;
-    volatile unsigned int *pio_z_i_addr   = NULL;
-    volatile unsigned int *pio_sigma_addr = NULL;
-    volatile unsigned int *pio_beta_addr  = NULL;
-    volatile unsigned int *pio_rho_addr   = NULL;
-    volatile unsigned int *pio_x_o_addr   = NULL;
-    volatile unsigned int *pio_y_o_addr   = NULL;
-    volatile unsigned int *pio_z_o_addr   = NULL;
-
-
+  	
 	// === need to mmap: =======================
 	// FPGA_CHAR_BASE
 	// FPGA_ONCHIP_BASE      
@@ -158,7 +357,6 @@ int main(void)
 		return(1);
 	}
     
-
 	// === get VGA char addr =====================
 	// get virtual addr that maps to physical
 	vga_char_virtual_base = mmap( NULL, FPGA_CHAR_SPAN, ( 	PROT_READ | PROT_WRITE ), MAP_SHARED, fd, FPGA_CHAR_BASE );	
@@ -180,7 +378,6 @@ int main(void)
 		return(1);
 	}
     
-	//  .reset (~KEY[0]),
     // Get the address that maps to the FPGA pixel buffer
 	vga_pixel_ptr =(unsigned int *)(vga_pixel_virtual_base);
 
@@ -204,31 +401,6 @@ int main(void)
     fix20 y_o;
     fix20 z_o;
 
-	// ===========================================
-
-	/* create a message to be displayed on the VGA 
-          and LCD displays */
-	char text_top_row[40] = "DE1-SoC ARM/FPGA\0";
-	char text_bottom_row[40] = "Cornell ece5760\0";
-	char text_next[40] = "Graphics primitives\0";
-	char num_string[20], time_string[20], out_string[20] ;
-	char color_index = 0 ;
-	int color_counter = 0 ;
-	
-	// position of disk primitive
-	int disc_x = 0;
-	// position of circle primitive
-	int circle_x = 0 ;
-	// position of box primitive
-	int box_x = 5 ;
-	// position of vertical line primitive
-	int Vline_x = 0;
-	// position of horizontal line primitive
-	int Hline_y = 250;
-
-    int x_coor = 0;
-
-
 	// clear the screen
 	VGA_box (0, 0, 639, 479, 0x0000);
 	// clear the text
@@ -238,8 +410,6 @@ int main(void)
 	VGA_text (10, 2, text_bottom_row);
 	VGA_text (10, 3, text_next);
 	
-    // reset at the very beginning
-
     // Initial values to send to fpga 
     *pio_z_i_addr = int2fix(25);
     *pio_y_i_addr = float2fix(0.1);
@@ -249,70 +419,24 @@ int main(void)
     *pio_beta_addr = float2fix(8./3.);
     *pio_rho_addr = int2fix(28);
 
-	*pio_reset_addr = 1;
-    // set the clocks
-    *pio_clk_addr = 1;
-    // usleep(300); // assert reset for 300us
-    *pio_clk_addr = 0;
-    *pio_reset_addr = 0; // deassert reset!
+	// thread identifiers
+   	pthread_t thread_scan, thread_draw, thread_reset;
 
-	while(1) 
-	{
-		// start timer
-		gettimeofday(&t1, NULL);
+	pthread_attr_t attr;
+	pthread_attr_init( &attr );
+	pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_JOINABLE );
+	
+	 // now the threads
+	pthread_create( &thread_reset, NULL, reset_thread, NULL );
+	pthread_create( &thread_draw, NULL, draw_thread, NULL );
+	pthread_create( &thread_scan, NULL, scan_thread, NULL );
 
-        // set the clocks
-        *pio_clk_addr = 1;
-        *pio_clk_addr = 0;
+	pthread_join( thread_reset, NULL );
+	pthread_join( thread_draw, NULL );
+	pthread_join( thread_scan, NULL );
 
-        // Read from the FPGA!
-        z_o = *pio_z_o_addr;
-        y_o = *pio_y_o_addr;
-        x_o = *pio_x_o_addr;
+   return 0;
 
-        sprintf(out_string, "%f", fix2float(z_o));
-		VGA_text (10, 4, out_string);
-
-        // Draw to the VGA!
-        // VGA_PIXEL(col,row,pixel_color);	
-        // VGA_Vline(x_coor, 0, 620, 0x0000);
-        // VGA_PIXEL(x_coor,(int)(5.*fix2float(x_o) + 100), cyan);	
-        // VGA_PIXEL(x_coor,(int)(5.*fix2float(y_o) + 200), magenta);	
-        // VGA_PIXEL(x_coor,(int)(5.*fix2float(z_o) + 250), yellow);	
-
-		VGA_xy(fix2float(x_o), fix2float(y_o));
-		VGA_xz(fix2float(x_o), fix2float(z_o));
-		VGA_yz(fix2float(y_o), fix2float(z_o));
-
-        x_coor += 1;
-
-        if (x_coor > 620){
-            x_coor = 0;
-        }
-
-		// void VGA_Vline(int x1, int y1, int y2, short pixel_color)
-        // clear the column
-        // VGA_Vline(Vline_x, 0, 300, 0x0000);
-        // // draw the sine wave!
-		// VGA_Vline(Vline_x, 300-50*sin(Vline_x/(6 * 3.1415)), 300-50*sin(Vline_x/(6 * 3.1415))+1, 0xffff);
-		// Vline_x += 1 ;
-      
-		// if (Vline_x > 620){
-        //     Vline_x = 20;
-        // }
-
-
-		// stop timer
-		gettimeofday(&t2, NULL);
-		elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000000.0;      // sec to us
-		elapsedTime += (t2.tv_usec - t1.tv_usec) ;   // us 
-		// sprintf(time_string, "T = %6.0f uSec  ", elapsedTime);
-		// VGA_text (10, 4, time_string);
-
-		// set frame rate
-		usleep(10000);
-		
-	} // end while(1)
 } // end main
 
 /****************************************************************************************
