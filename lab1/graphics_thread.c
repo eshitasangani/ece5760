@@ -53,9 +53,9 @@ void VGA_Vline(int, int, int, short) ;
 void VGA_Hline(int, int, int, short) ;
 void VGA_disc (int, int, int, short);
 void VGA_circle (int, int, int, int);
-// void VGA_xy(float,float);
-// void VGA_yz(float,float);
-// void VGA_xz(float,float);
+void VGA_xy(float,float);
+void VGA_yz(float,float);
+void VGA_xz(float,float);
 
 // 16-bit primary colors
 #define red  (0+(0<<5)+(31<<11))
@@ -80,7 +80,7 @@ int colors[] = {red, dark_red, green, dark_green, blue, dark_blue,
 	*(short *)pixel_ptr = (color);\
 } while(0)
 
-// MACROS FOR FIXED POINT CONVERSION
+// MACROS FOR FIXED POINT CONVERSION // 
 
 typedef signed int fix20 ; // 7.20 fixed pt
 
@@ -111,15 +111,15 @@ double elapsedTime;
 
 //  VGA 3D GRAPHING FUNCTIONS // 
 
-// void VGA_xy(float,float) { 
-//     VGA_PIXEL( 160 - (int) (x*4),160 - (int) (y*4),white )
-// }
-// void VGA_yz(float,float) { 
-//     VGA_PIXEL( 160 - (int) (y*4),160 - (int) (z*4),white )
-// }
-// void VGA_xz(float,float) { 
-//     VGA_PIXEL( 160 - (int) (x*4),160 - (int) (z*4),white )
-// }
+void VGA_xy(float x,float y) { 
+    VGA_PIXEL((int) (x*4) + 160, (int) (y*4) + 160, cyan );
+}
+void VGA_yz(float y,float z) { 
+    VGA_PIXEL( (int) (y*4) + 400, (int) (z*4) + 100, magenta );
+}
+void VGA_xz(float x,float z) { 
+    VGA_PIXEL( (int) (x*4) + 260, (int) (z*4) + 260, yellow );
+}
 
 
 int main(void)
@@ -228,8 +228,7 @@ int main(void)
 
     int x_coor = 0;
 
-	//VGA_text (34, 1, text_top_row);
-	//VGA_text (34, 2, text_bottom_row);
+
 	// clear the screen
 	VGA_box (0, 0, 639, 479, 0x0000);
 	// clear the text
@@ -239,11 +238,6 @@ int main(void)
 	VGA_text (10, 2, text_bottom_row);
 	VGA_text (10, 3, text_next);
 	
-	// R bits 11-15 mask 0xf800
-	// G bits 5-10  mask 0x07e0
-	// B bits 0-4   mask 0x001f
-	// so color = B+(G<<5)+(R<<11);
-
     // reset at the very beginning
 
     // Initial values to send to fpga 
@@ -281,10 +275,14 @@ int main(void)
 
         // Draw to the VGA!
         // VGA_PIXEL(col,row,pixel_color);	
-        VGA_Vline(x_coor, 0, 620, 0x0000);
-        VGA_PIXEL(x_coor,(int)(5.*fix2float(x_o) + 100), cyan);	
-        VGA_PIXEL(x_coor,(int)(5.*fix2float(y_o) + 200), magenta);	
-        VGA_PIXEL(x_coor,(int)(5.*fix2float(z_o) + 250), yellow);	
+        // VGA_Vline(x_coor, 0, 620, 0x0000);
+        // VGA_PIXEL(x_coor,(int)(5.*fix2float(x_o) + 100), cyan);	
+        // VGA_PIXEL(x_coor,(int)(5.*fix2float(y_o) + 200), magenta);	
+        // VGA_PIXEL(x_coor,(int)(5.*fix2float(z_o) + 250), yellow);	
+
+		VGA_xy(fix2float(x_o), fix2float(y_o));
+		VGA_xz(fix2float(x_o), fix2float(z_o));
+		VGA_yz(fix2float(y_o), fix2float(z_o));
 
         x_coor += 1;
 
@@ -292,8 +290,6 @@ int main(void)
             x_coor = 0;
         }
 
-
-		
 		// void VGA_Vline(int x1, int y1, int y2, short pixel_color)
         // clear the column
         // VGA_Vline(Vline_x, 0, 300, 0x0000);
@@ -386,227 +382,6 @@ void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
 		}
 }
 
-/****************************************************************************************
- * Draw a outline rectangle on the VGA monitor 
-****************************************************************************************/
-#define SWAP(X,Y) do{int temp=X; X=Y; Y=temp;}while(0) 
-
-void VGA_rect(int x1, int y1, int x2, int y2, short pixel_color)
-{
-	char  *pixel_ptr ; 
-	int row, col;
-
-	/* check and fix box coordinates to be valid */
-	if (x1>639) x1 = 639;
-	if (y1>479) y1 = 479;
-	if (x2>639) x2 = 639;
-	if (y2>479) y2 = 479;
-	if (x1<0) x1 = 0;
-	if (y1<0) y1 = 0;
-	if (x2<0) x2 = 0;
-	if (y2<0) y2 = 0;
-	if (x1>x2) SWAP(x1,x2);
-	if (y1>y2) SWAP(y1,y2);
-	// left edge
-	col = x1;
-	for (row = y1; row <= y2; row++){
-		//640x480
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;	
-		VGA_PIXEL(col,row,pixel_color);		
-	}
-		
-	// right edge
-	col = x2;
-	for (row = y1; row <= y2; row++){
-		//640x480
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;	
-		VGA_PIXEL(col,row,pixel_color);		
-	}
-	
-	// top edge
-	row = y1;
-	for (col = x1; col <= x2; ++col){
-		//640x480
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;	
-		VGA_PIXEL(col,row,pixel_color);
-	}
-	
-	// bottom edge
-	row = y2;
-	for (col = x1; col <= x2; ++col){
-		//640x480
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;
-		VGA_PIXEL(col,row,pixel_color);
-	}
-}
-
-/****************************************************************************************
- * Draw a horixontal line on the VGA monitor 
-****************************************************************************************/
-#define SWAP(X,Y) do{int temp=X; X=Y; Y=temp;}while(0) 
-
-void VGA_Hline(int x1, int y1, int x2, short pixel_color)
-{
-	char  *pixel_ptr ; 
-	int row, col;
-
-	/* check and fix box coordinates to be valid */
-	if (x1>639) x1 = 639;
-	if (y1>479) y1 = 479;
-	if (x2>639) x2 = 639;
-	if (x1<0) x1 = 0;
-	if (y1<0) y1 = 0;
-	if (x2<0) x2 = 0;
-	if (x1>x2) SWAP(x1,x2);
-	// line
-	row = y1;
-	for (col = x1; col <= x2; ++col){
-		//640x480
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;	
-		VGA_PIXEL(col,row,pixel_color);		
-	}
-}
-
-/****************************************************************************************
- * Draw a vertical line on the VGA monitor 
-****************************************************************************************/
-#define SWAP(X,Y) do{int temp=X; X=Y; Y=temp;}while(0) 
-
-void VGA_Vline(int x1, int y1, int y2, short pixel_color)
-{
-	char  *pixel_ptr ; 
-	int row, col;
-
-	/* check and fix box coordinates to be valid */
-	if (x1>639) x1 = 639;
-	if (y1>479) y1 = 479;
-	if (y2>479) y2 = 479;
-	if (x1<0) x1 = 0;
-	if (y1<0) y1 = 0;
-	if (y2<0) y2 = 0;
-	if (y1>y2) SWAP(y1,y2);
-	// line
-	col = x1;
-	for (row = y1; row <= y2; row++){
-		//640x480
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;	
-		VGA_PIXEL(col,row,pixel_color);			
-	}
-}
-
-
-/****************************************************************************************
- * Draw a filled circle on the VGA monitor 
-****************************************************************************************/
-
-void VGA_disc(int x, int y, int r, short pixel_color)
-{
-	char  *pixel_ptr ; 
-	int row, col, rsqr, xc, yc;
-	
-	rsqr = r*r;
-	
-	for (yc = -r; yc <= r; yc++)
-		for (xc = -r; xc <= r; xc++)
-		{
-			col = xc;
-			row = yc;
-			// add the r to make the edge smoother
-			if(col*col+row*row <= rsqr+r){
-				col += x; // add the center point
-				row += y; // add the center point
-				//check for valid 640x480
-				if (col>639) col = 639;
-				if (row>479) row = 479;
-				if (col<0) col = 0;
-				if (row<0) row = 0;
-				//pixel_ptr = (char *)vga_pixel_ptr + (row<<10) + col ;
-				// set pixel color
-				//*(char *)pixel_ptr = pixel_color;
-				VGA_PIXEL(col,row,pixel_color);	
-			}
-					
-		}
-}
-
-/****************************************************************************************
- * Draw a  circle on the VGA monitor 
-****************************************************************************************/
-
-void VGA_circle(int x, int y, int r, int pixel_color)
-{
-	char  *pixel_ptr ; 
-	int row, col, rsqr, xc, yc;
-	int col1, row1;
-	rsqr = r*r;
-	
-	for (yc = -r; yc <= r; yc++){
-		//row = yc;
-		col1 = (int)sqrt((float)(rsqr + r - yc*yc));
-		// right edge
-		col = col1 + x; // add the center point
-		row = yc + y; // add the center point
-		//check for valid 640x480
-		if (col>639) col = 639;
-		if (row>479) row = 479;
-		if (col<0) col = 0;
-		if (row<0) row = 0;
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10) + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;
-		VGA_PIXEL(col,row,pixel_color);	
-		// left edge
-		col = -col1 + x; // add the center point
-		//check for valid 640x480
-		if (col>639) col = 639;
-		if (row>479) row = 479;
-		if (col<0) col = 0;
-		if (row<0) row = 0;
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10) + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;
-		VGA_PIXEL(col,row,pixel_color);	
-	}
-	for (xc = -r; xc <= r; xc++){
-		//row = yc;
-		row1 = (int)sqrt((float)(rsqr + r - xc*xc));
-		// right edge
-		col = xc + x; // add the center point
-		row = row1 + y; // add the center point
-		//check for valid 640x480
-		if (col>639) col = 639;
-		if (row>479) row = 479;
-		if (col<0) col = 0;
-		if (row<0) row = 0;
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10) + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;
-		VGA_PIXEL(col,row,pixel_color);	
-		// left edge
-		row = -row1 + y; // add the center point
-		//check for valid 640x480
-		if (col>639) col = 639;
-		if (row>479) row = 479;
-		if (col<0) col = 0;
-		if (row<0) row = 0;
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10) + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;
-		VGA_PIXEL(col,row,pixel_color);	
-	}
-}
 
 // =============================================
 // === Draw a line
