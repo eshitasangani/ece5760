@@ -218,19 +218,13 @@ void * reset_thread() {
   }
 }
 
-
 // draw thread 
 
 void * draw_thread () { 
 
 	while(1) 
 	{
-
 		if (!init_rest) { 
-
-			// if we arent doing a reset, send posedge of the clk
-			// *(pio_clk_addr) = 1;
-    		// *(pio_clk_addr) = 0;
 
 			if (!paused) { 
 
@@ -248,7 +242,6 @@ void * draw_thread () {
 				VGA_text (30, 55, out_string);
 
 				usleep(speed);
-
 			}
 
 		}
@@ -265,7 +258,7 @@ void * scan_thread () {
 		// which category to change
 		// switching case statement 
 
-		printf("0: init, 1: params, 2: speed, 3: pause, 4: clear -- ");
+		printf("0: init, 1: pause, 2: speed, 3: params, 4: clear -- ");
     	scanf("%i", &set);
 
 		switch ( set ) {
@@ -284,11 +277,11 @@ void * scan_thread () {
 
 			case 1:  // pause or play 
 
-			if (!paused) { 
-				// play t
-				*pio_clk_addr = 0; 
-				*pio_clk_addr = 1;
-			}
+				if (!paused) { 
+					// play t
+					*pio_clk_addr = 0; 
+					*pio_clk_addr = 1;
+				}
 
 			case 2: // change the drawing speed 
 
@@ -399,6 +392,32 @@ int main(void)
     fix20 y_o;
     fix20 z_o;
 
+
+	/// VISUALIZE ON THE SCREEN /// 
+
+	char text_x[40] = "init x = ";
+	char text_y[40] = "init y = ";
+	char text_z[40] = "init z = ";
+	char text_sig[40] = "sig = ";
+	char text_beta[40] = "beta = ";
+	char text_rho[40] = "rho = ";
+	char text_speed[40] = "usleep = ";
+	char text_status[40] = "status = ";
+
+	// clear the screen
+	VGA_box (0, 0, 639, 479, 0x0000);
+	// clear the text
+	VGA_text_clear();
+	// write text
+	VGA_text (3, 35, text_x);
+	VGA_text (3, 36, text_y);
+	VGA_text (3, 37, text_z);
+	VGA_text (3, 38, text_sig);
+	VGA_text (3, 39, text_beta);
+	VGA_text (3, 40, text_rho);
+	VGA_text (3, 41, text_speed);
+	VGA_text (3, 42, text_status);
+
 	// clear the screen
 	VGA_box (0, 0, 639, 479, 0x0000);
 	// clear the text
@@ -416,6 +435,12 @@ int main(void)
     *pio_sigma_addr = int2fix(10);
     *pio_beta_addr = float2fix(8./3.);
     *pio_rho_addr = int2fix(28);
+
+	*(pio_clk_addr) = 0;
+	*(pio_reset_addr) = 0;
+	*(pio_clk_addr) = 1;
+	*(pio_clk_addr) = 0;
+	*(pio_reset_addr) = 1;
 
 	// thread identifiers
    	pthread_t thread_scan, thread_draw, thread_reset;
