@@ -1,7 +1,22 @@
 
 module Computer_System (
+	audio_ADCDAT,
+	audio_ADCLRCK,
+	audio_BCLK,
+	audio_DACDAT,
+	audio_DACLRCK,
+	audio_clk_clk,
+	audio_pll_ref_clk_clk,
+	audio_pll_ref_reset_reset,
 	av_config_SDAT,
 	av_config_SCLK,
+	bus_master_audio_external_interface_address,
+	bus_master_audio_external_interface_byte_enable,
+	bus_master_audio_external_interface_read,
+	bus_master_audio_external_interface_write,
+	bus_master_audio_external_interface_write_data,
+	bus_master_audio_external_interface_acknowledge,
+	bus_master_audio_external_interface_read_data,
 	hps_io_hps_io_emac1_inst_TX_CLK,
 	hps_io_hps_io_emac1_inst_TXD0,
 	hps_io_hps_io_emac1_inst_TXD1,
@@ -74,6 +89,17 @@ module Computer_System (
 	memory_mem_odt,
 	memory_mem_dm,
 	memory_oct_rzqin,
+	pio_beta_external_connection_export,
+	pio_clk_external_connection_export,
+	pio_reset_external_connection_export,
+	pio_rho_external_connection_export,
+	pio_sigma_external_connection_export,
+	pio_x_i_external_connection_export,
+	pio_x_o_external_connection_export,
+	pio_y_i_external_connection_export,
+	pio_y_o_external_connection_export,
+	pio_z_i_external_connection_export,
+	pio_z_o_external_connection_export,
 	sdram_addr,
 	sdram_ba,
 	sdram_cas_n,
@@ -83,6 +109,8 @@ module Computer_System (
 	sdram_dqm,
 	sdram_ras_n,
 	sdram_we_n,
+	sdram_clk_clk,
+	system_pll_ref_clk_clk,
 	system_pll_ref_reset_reset,
 	vga_CLK,
 	vga_HS,
@@ -93,23 +121,25 @@ module Computer_System (
 	vga_G,
 	vga_B,
 	vga_pll_ref_clk_clk,
-	vga_pll_ref_reset_reset,
-	pio_clk_external_connection_export,
-	pio_reset_external_connection_export,
-	pio_x_i_external_connection_export,
-	pio_y_i_external_connection_export,
-	pio_z_i_external_connection_export,
-	pio_sigma_external_connection_export,
-	pio_beta_external_connection_export,
-	pio_rho_external_connection_export,
-	pio_x_o_external_connection_export,
-	pio_y_o_external_connection_export,
-	pio_z_o_external_connection_export,
-	system_pll_ref_clk_clk,
-	sdram_clk_clk);	
+	vga_pll_ref_reset_reset);	
 
+	input		audio_ADCDAT;
+	input		audio_ADCLRCK;
+	input		audio_BCLK;
+	output		audio_DACDAT;
+	input		audio_DACLRCK;
+	output		audio_clk_clk;
+	input		audio_pll_ref_clk_clk;
+	input		audio_pll_ref_reset_reset;
 	inout		av_config_SDAT;
 	output		av_config_SCLK;
+	input	[15:0]	bus_master_audio_external_interface_address;
+	input	[3:0]	bus_master_audio_external_interface_byte_enable;
+	input		bus_master_audio_external_interface_read;
+	input		bus_master_audio_external_interface_write;
+	input	[31:0]	bus_master_audio_external_interface_write_data;
+	output		bus_master_audio_external_interface_acknowledge;
+	output	[31:0]	bus_master_audio_external_interface_read_data;
 	output		hps_io_hps_io_emac1_inst_TX_CLK;
 	output		hps_io_hps_io_emac1_inst_TXD0;
 	output		hps_io_hps_io_emac1_inst_TXD1;
@@ -182,6 +212,17 @@ module Computer_System (
 	output		memory_mem_odt;
 	output	[3:0]	memory_mem_dm;
 	input		memory_oct_rzqin;
+	output	[31:0]	pio_beta_external_connection_export;
+	output		pio_clk_external_connection_export;
+	output		pio_reset_external_connection_export;
+	output	[31:0]	pio_rho_external_connection_export;
+	output	[31:0]	pio_sigma_external_connection_export;
+	output	[31:0]	pio_x_i_external_connection_export;
+	input	[31:0]	pio_x_o_external_connection_export;
+	output	[31:0]	pio_y_i_external_connection_export;
+	input	[31:0]	pio_y_o_external_connection_export;
+	output	[31:0]	pio_z_i_external_connection_export;
+	input	[31:0]	pio_z_o_external_connection_export;
 	output	[12:0]	sdram_addr;
 	output	[1:0]	sdram_ba;
 	output		sdram_cas_n;
@@ -191,6 +232,8 @@ module Computer_System (
 	output	[1:0]	sdram_dqm;
 	output		sdram_ras_n;
 	output		sdram_we_n;
+	output		sdram_clk_clk;
+	input		system_pll_ref_clk_clk;
 	input		system_pll_ref_reset_reset;
 	output		vga_CLK;
 	output		vga_HS;
@@ -202,17 +245,4 @@ module Computer_System (
 	output	[7:0]	vga_B;
 	input		vga_pll_ref_clk_clk;
 	input		vga_pll_ref_reset_reset;
-	output		pio_clk_external_connection_export;
-	output		pio_reset_external_connection_export;
-	output	[31:0]	pio_x_i_external_connection_export;
-	output	[31:0]	pio_y_i_external_connection_export;
-	output	[31:0]	pio_z_i_external_connection_export;
-	output	[31:0]	pio_sigma_external_connection_export;
-	output	[31:0]	pio_beta_external_connection_export;
-	output	[31:0]	pio_rho_external_connection_export;
-	input	[31:0]	pio_x_o_external_connection_export;
-	input	[31:0]	pio_y_o_external_connection_export;
-	input	[31:0]	pio_z_o_external_connection_export;
-	input		system_pll_ref_clk_clk;
-	output		sdram_clk_clk;
 endmodule
