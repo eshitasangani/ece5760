@@ -3,7 +3,7 @@
 /// This code will segfault the original
 /// DE1 computer
 /// compile with
-/// gcc graphics_video_16bit.c -o gr -O2 -lm
+/// gcc graphics_thread.c -o th -O2 -lm -pthread
 ///
 ///////////////////////////////////////
 #include <stdio.h>
@@ -136,6 +136,7 @@ double elapsedTime;
 char text_top_row[40] = "DE1-SoC ARM/FPGA\0";
 char text_bottom_row[40] = "Cornell ece5760\0";
 char text_next[40] = "Graphics primitives\0";
+char text_names[40] = "Eshita, Mattie, Katherine\0";
 char num_string[20], time_string[20], out_string[20] ;
 char color_index = 0 ;
 int color_counter = 0 ;
@@ -164,6 +165,10 @@ void VGA_yz(float y,float z) {
 void VGA_xz(float x,float z) { 
     VGA_PIXEL( (int) (x*4) + 260, (int) (z*4) + 260, yellow );
 }
+// Variables to store outputs from the FPGA
+fix20 x_o;
+fix20 y_o;
+fix20 z_o;
 ///////////////////////////////////////////////////////////////
 // THREADS ////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////
@@ -176,15 +181,16 @@ float temp_sigma = 10;
 float temp_beta = 8./3.;
 float temp_rho = 28;
 
+
 // change reset value via trigger 
-int init_rest = 0; 
+int init_reset = 0; 
 
 // if paused - high
 int paused = 0; 
 int set = 0;   // what do they wanna change
 int change_speed = 0; // change speed or not? 
 // min speed 
-int speed = 5000;
+int speed = 50000;
 
 ///////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////
@@ -195,7 +201,7 @@ void * reset_thread() {
 
   while (1) {
   
-    if (init_rest) {
+    if (init_reset) {
     
 		// update pio pointers w the initial values 
 		*(pio_x_i_addr) = float2fix(temp_x_i);
@@ -204,16 +210,16 @@ void * reset_thread() {
 		
 		// do the actual reset
 		*(pio_clk_addr) = 0;
-		*(pio_reset_addr) = 0;
+		*(pio_reset_addr) = 1;
 		*(pio_clk_addr) = 1;
 		*(pio_clk_addr) = 0;
-		*(pio_reset_addr) = 1;
+		*(pio_reset_addr) = 0;
      
       // clear VGA screen 
       VGA_box (0, 0, 639, 479, 0x0000);
       
       // done initializing
-      init_rest = 0;
+      init_reset = 0;
     }
   }
 }
@@ -224,22 +230,45 @@ void * draw_thread () {
 
 	while(1) 
 	{
-		if (!init_rest) { 
+		if (!init_reset) { 
 
 			if (!paused) { 
 
-				VGA_xy(fix2float(*pio_x_o_addr), fix2float(*pio_y_o_addr));
-				VGA_xz(fix2float(*pio_x_o_addr), fix2float(*pio_z_o_addr));
-				VGA_yz(fix2float(*pio_y_o_addr), fix2float(*pio_z_o_addr));
+				*pio_clk_addr = 1; 
+				*pio_clk_addr = 0;
+
+				// Read from the FPGA!
+				z_o = *pio_z_o_addr;
+				y_o = *pio_y_o_addr;
+				x_o = *pio_x_o_addr;
+				VGA_xy(fix2float(x_o), fix2float(y_o));
+				VGA_xz(fix2float(x_o), fix2float(z_o));
+				VGA_yz(fix2float(y_o), fix2float(z_o));
 
 				// add printing text here 
 
-				sprintf(out_string, "xy");
+				sprintf(out_string, "x and y");
 				VGA_text (20, 35, out_string);
-				sprintf(out_string, "xz");
+				sprintf(out_string, "x and z");
 				VGA_text (50, 35, out_string);
-				sprintf(out_string, "yz");
+				sprintf(out_string, "y and z");
 				VGA_text (30, 55, out_string);
+
+				sprintf(out_string, "x init: %f", temp_x_i);
+				VGA_text (35, 1, out_string);
+				sprintf(out_string, "y init: %f", temp_y_i);
+				VGA_text (35, 2, out_string);
+				sprintf(out_string, "z init: %f", temp_z_i);
+				VGA_text (35, 3, out_string);
+
+				sprintf(out_string, "sigma: %f", temp_sigma);
+				VGA_text (55, 1, out_string);
+				sprintf(out_string, "beta: %f", temp_beta);
+				VGA_text (55, 2, out_string);
+				sprintf(out_string, "rho: %f", temp_rho);
+				VGA_text (55, 3, out_string);
+
+
 
 				usleep(speed);
 			}
@@ -271,17 +300,14 @@ void * scan_thread () {
 				scanf("%f", &temp_y_i);
 				printf("Enter z: ");
 				scanf("%f", &temp_z_i);
-				init_rest = 1; // reset
+				init_reset = 1; // reset
 			
 			break;
 
 			case 1:  // pause or play 
 
-				if (!paused) { 
-					// play t
-					*pio_clk_addr = 0; 
-					*pio_clk_addr = 1;
-				}
+				paused = !paused;
+				break;
 
 			case 2: // change the drawing speed 
 
@@ -290,13 +316,13 @@ void * scan_thread () {
 
 				if (change_speed) { 
 					// need speed cap? 
-					speed = speed - 700;  // less sleep
+					speed = speed - 7000;  // less sleep
 				}
 				else { 
-					speed = speed + 700; // add more sleep 
+					speed = speed + 7000; // add more sleep 
 				}
 
-			break;
+				break;
 
 			case 3: // change sigma, rho, beta 
 
@@ -309,6 +335,7 @@ void * scan_thread () {
 				*(pio_sigma_addr) = float2fix(temp_sigma);
 				*(pio_beta_addr) = float2fix(temp_beta);
 				*(pio_rho_addr) = float2fix(temp_rho);
+				init_reset=1;
         
         	break;
 
@@ -387,11 +414,6 @@ int main(void)
     pio_y_o_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_Y_O_BASE );
     pio_z_o_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_Z_O_BASE );
 
-    // Variables to store outputs from the FPGA
-    fix20 x_o;
-    fix20 y_o;
-    fix20 z_o;
-
 
 	/// VISUALIZE ON THE SCREEN /// 
 
@@ -407,16 +429,16 @@ int main(void)
 	// clear the screen
 	VGA_box (0, 0, 639, 479, 0x0000);
 	// clear the text
-	VGA_text_clear();
-	// write text
-	VGA_text (3, 35, text_x);
-	VGA_text (3, 36, text_y);
-	VGA_text (3, 37, text_z);
-	VGA_text (3, 38, text_sig);
-	VGA_text (3, 39, text_beta);
-	VGA_text (3, 40, text_rho);
-	VGA_text (3, 41, text_speed);
-	VGA_text (3, 42, text_status);
+	// VGA_text_clear();
+	// // write text
+	// VGA_text (3, 35, text_x);
+	// VGA_text (3, 36, text_y);
+	// VGA_text (3, 37, text_z);
+	// VGA_text (3, 38, text_sig);
+	// VGA_text (3, 39, text_beta);
+	// VGA_text (3, 40, text_rho);
+	// VGA_text (3, 41, text_speed);
+	// VGA_text (3, 42, text_status);
 
 	// clear the screen
 	VGA_box (0, 0, 639, 479, 0x0000);
@@ -426,6 +448,7 @@ int main(void)
 	VGA_text (10, 1, text_top_row);
 	VGA_text (10, 2, text_bottom_row);
 	VGA_text (10, 3, text_next);
+	VGA_text (10, 4, text_names);
 	
     // Initial values to send to fpga 
     *pio_z_i_addr = int2fix(25);
@@ -437,10 +460,10 @@ int main(void)
     *pio_rho_addr = int2fix(28);
 
 	*(pio_clk_addr) = 0;
-	*(pio_reset_addr) = 0;
+	*(pio_reset_addr) = 1;
 	*(pio_clk_addr) = 1;
 	*(pio_clk_addr) = 0;
-	*(pio_reset_addr) = 1;
+	*(pio_reset_addr) = 0;
 
 	// thread identifiers
    	pthread_t thread_scan, thread_draw, thread_reset;
@@ -458,7 +481,7 @@ int main(void)
 	pthread_join( thread_draw, NULL );
 	pthread_join( thread_scan, NULL );
 
-   return 0;
+   	return 0;
 
 } // end main
 
