@@ -16,7 +16,6 @@
 #include <sys/mman.h>
 #include <sys/time.h> 
 #include <math.h>
-//#include "address_map_arm_brl4.h"
 
 // video display
 #define SDRAM_BASE            0xC0000000
@@ -28,7 +27,6 @@
 #define FPGA_CHAR_SPAN        0x00002000
 /* Cyclone V FPGA devices */
 #define HW_REGS_BASE          0xff200000
-//#define HW_REGS_SPAN        0x00200000 
 #define HW_REGS_SPAN          0x00005000 
 
 #define PIO_CLK_BASE   0x00
@@ -121,6 +119,9 @@ void VGA_xz(float x,float z) {
     VGA_PIXEL( (int) (x*4) + 260, (int) (z*4) + 260, yellow );
 }
 
+///////////////////////////////////////////////////////////////
+// main   // 
+///////////////////////////////////////////////////////////////
 
 int main(void)
 {
@@ -228,8 +229,6 @@ int main(void)
 
     int x_coor = 0;
 
-	//VGA_text (34, 1, text_top_row);
-	//VGA_text (34, 2, text_bottom_row);
 	// clear the screen
 	VGA_box (0, 0, 639, 479, 0x0000);
 	// clear the text
@@ -246,10 +245,6 @@ int main(void)
 	sprintf(out_string, "yz");
 	VGA_text (30, 55, out_string);
 	
-
-
-
-
     // Initial values to send to fpga 
     *pio_z_i_addr = int2fix(25);
     *pio_y_i_addr = float2fix(0.1);
@@ -270,8 +265,6 @@ int main(void)
 	// deassert reset!
     *pio_reset_addr = 0; 
 
-
-
 	while(1) 
 	{
 		// start timer
@@ -286,15 +279,12 @@ int main(void)
         y_o = *pio_y_o_addr;
         x_o = *pio_x_o_addr;
 
-
-
         // Draw to the VGA!
         // VGA_PIXEL(col,row,pixel_color);	
         // VGA_Vline(x_coor, 0, 620, 0x0000);
         // VGA_PIXEL(x_coor,(int)(5.*fix2float(x_o) + 100), cyan);	
         // VGA_PIXEL(x_coor,(int)(5.*fix2float(y_o) + 200), magenta);	
         // VGA_PIXEL(x_coor,(int)(5.*fix2float(z_o) + 250), yellow);	
-
 
 		VGA_xy(fix2float(x_o), fix2float(y_o));
 		VGA_xz(fix2float(x_o), fix2float(z_o));
@@ -307,7 +297,6 @@ int main(void)
         }
 
 
-		
 		// void VGA_Vline(int x1, int y1, int y2, short pixel_color)
         // clear the column
         // VGA_Vline(Vline_x, 0, 300, 0x0000);
@@ -318,7 +307,6 @@ int main(void)
 		// if (Vline_x > 620){
         //     Vline_x = 20;
         // }
-
 
 		// stop timer
 		gettimeofday(&t2, NULL);

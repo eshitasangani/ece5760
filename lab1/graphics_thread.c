@@ -18,9 +18,6 @@
 #include <math.h>
 #include <pthread.h>
 
-#define TRUE 1
-#define FALSE 0
-
 // lock for scanf
 pthread_mutex_t scan_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -128,7 +125,7 @@ int fd;
 struct timeval t1, t2;
 double elapsedTime;
 
-// drawing varaible s
+// drawing varaibles
 // ===========================================
 
 /* create a message to be displayed on the VGA 
@@ -169,6 +166,8 @@ void VGA_xz(float x,float z) {
 fix20 x_o;
 fix20 y_o;
 fix20 z_o;
+
+
 ///////////////////////////////////////////////////////////////
 // THREADS ////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////
@@ -181,7 +180,6 @@ float temp_sigma = 10;
 float temp_beta = 8./3.;
 float temp_rho = 28;
 
-
 // change reset value via trigger 
 int init_reset = 0; 
 
@@ -192,11 +190,11 @@ int change_speed = 0; // change speed or not?
 // min speed 
 int speed = 50000;
 
-///////////////////////////////////////////////////////////////
+
 ///////////////////////////////////////////////////////////////
 // reset thread  // 
 ///////////////////////////////////////////////////////////////
-///////////////////////////////////////////////////////////////
+
 void * reset_thread() {
 
   while (1) {
@@ -224,7 +222,9 @@ void * reset_thread() {
   }
 }
 
-// draw thread 
+///////////////////////////////////////////////////////////////
+// draw thread  // 
+///////////////////////////////////////////////////////////////
 
 void * draw_thread () { 
 
@@ -280,12 +280,14 @@ void * draw_thread () {
 }
 
 
-// scan thread 
+///////////////////////////////////////////////////////////////
+// scan thread  // 
+///////////////////////////////////////////////////////////////
+
 void * scan_thread () {
 
 	while (1) { 
 		// which category to change
-		// switching case statement 
 
 		printf("0: init, 1: pause, 2: speed, 3: params, 4: clear -- ");
     	scanf("%i", &set);
@@ -348,9 +350,11 @@ void * scan_thread () {
 
 	} 
 
-
 } 
 
+///////////////////////////////////////////////////////////////
+// main   // 
+///////////////////////////////////////////////////////////////
 
 int main(void)
 {
@@ -414,7 +418,6 @@ int main(void)
     pio_y_o_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_Y_O_BASE );
     pio_z_o_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_Z_O_BASE );
 
-
 	/// VISUALIZE ON THE SCREEN /// 
 
 	char text_x[40] = "init x = ";
@@ -426,19 +429,6 @@ int main(void)
 	char text_speed[40] = "usleep = ";
 	char text_status[40] = "status = ";
 
-	// clear the screen
-	VGA_box (0, 0, 639, 479, 0x0000);
-	// clear the text
-	// VGA_text_clear();
-	// // write text
-	// VGA_text (3, 35, text_x);
-	// VGA_text (3, 36, text_y);
-	// VGA_text (3, 37, text_z);
-	// VGA_text (3, 38, text_sig);
-	// VGA_text (3, 39, text_beta);
-	// VGA_text (3, 40, text_rho);
-	// VGA_text (3, 41, text_speed);
-	// VGA_text (3, 42, text_status);
 
 	// clear the screen
 	VGA_box (0, 0, 639, 479, 0x0000);

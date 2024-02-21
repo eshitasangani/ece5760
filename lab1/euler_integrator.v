@@ -26,27 +26,16 @@ wire signed [26:0] y_i;
 wire signed [26:0] z_i;
 
 // INITIAL VALUES //
-assign x_i = -27'b0000001_00000000000000000000;
-assign y_i = 27'b0000000_00011001100110011001;
-assign z_i = 27'b0011001_00000000000000000000;
-assign sigma = 27'b0001010_00000000000000000000;
-assign beta = 27'b0000010_10101010101010101010;
-assign rho = 27'b0011100_00000000000000000000;
-
-// assign sigma = 27'hA00000; //10
-// assign beta = 27'h2AAAAA; //2.66666
-// assign rho = 27'h1C00000; //28
-
-// assign x_init = 27'h7F00000; //-1
-// assign y_init = 27'h19999; //0.1
-// assign z_init = 27'h1900000; //25
-// assign dt = 27'h1000; // 1/256
+assign x_i = -27'b0000001_00000000000000000000; //-1
+assign y_i = 27'b0000000_00011001100110011001; //0.1
+assign z_i = 27'b0011001_00000000000000000000; //25
+assign sigma = 27'b0001010_00000000000000000000; //10
+assign beta = 27'b0000010_10101010101010101010; //2.66666
+assign rho = 27'b0011100_00000000000000000000; //28
 
 //Initialize clocks and index
 initial begin
     clk_50 = 1'b0;
-    // clk_25 = 1'b0;
-    //testbench_out = 15'd0 ;
 end
 
 //Toggle the clocks
@@ -54,11 +43,6 @@ always begin
     #10
     clk_50  = !clk_50;
 end
-
-// always begin
-//     #20
-//     clk_25  = !clk_25;
-// end
 
 //Intialize and drive signals
 initial begin

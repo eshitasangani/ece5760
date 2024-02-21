@@ -379,12 +379,12 @@ wire signed [26:0]  x_o;
 wire signed [26:0]  y_o;
 wire signed [26:0]  z_o;
 
-wire signed [32:0] sigma;
-wire signed [32:0] beta;
-wire signed [32:0] rho;
-wire signed [32:0] x_i;
-wire signed [32:0] y_i;
-wire signed [32:0] z_i;
+wire signed [31:0] sigma;
+wire signed [31:0] beta;
+wire signed [31:0] rho;
+wire signed [31:0] x_i;
+wire signed [31:0] y_i;
+wire signed [31:0] z_i;
 
 //=======================================================
 // Bus controller for AVALON bus-master
