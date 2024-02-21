@@ -26,21 +26,26 @@ initial begin
     reset  = 1'b0;
 end
 
-wire done_outside;
-wire done_inside;
+wire [15:0] iter;
+wire        done;
 
 complex_iterator complex_iterator_inst (
     .clk          (clk),
     .reset        (reset),
     .max_iter     (16'd1000),
 
-    .c_r          (27'b1110_00000000000000000000000),
-    .c_i          (27'b0000_00000000000000000000000),
+    .c_r          ( 27'b1111_00000000000000000000000),
+    .c_i          ( 27'b0000_00000000000000000000000),
 
-    .done_outside (done_outside),
-    .done_inside  (done_inside)
+    .iter         (iter),
+    .done         (done)
 );
 
+//always begin
+//    if (done) begin
+//	$finish;
+//    end
+//end
 
 endmodule
 
@@ -53,16 +58,17 @@ module complex_iterator (
     input  wire signed [26:0] c_r,
     input  wire signed [26:0] c_i,
 
-    output wire               done_outside,
-    output wire               done_inside
+    output wire        [15:0] iter,
+    output wire               done
 );
     
-    reg  signed [26:0] z_r;
-    reg  signed [26:0] z_i;
-    reg  signed [26:0] z_i_sq;
-    reg  signed [26:0] z_r_sq;
-    reg  signed [15:0] iter;
+    wire signed [26:0] z_r;
+    wire signed [26:0] z_i;
+    wire signed [26:0] z_i_sq;
+    wire signed [26:0] z_r_sq;
+
     wire signed [26:0] z_out;
+    // wire        [15:0] counter;
 
     // top branch internal sigs
 
@@ -75,31 +81,77 @@ module complex_iterator (
     wire signed [26:0] z_i_tmp;
     wire signed [26:0] z_i_sq_tmp;
 
+    ////////////////////////////////////////////////////
+    /////////////////// ENABLE REGISTERS ///////////////
+    ////////////////////////////////////////////////////
+    enable_reg #(27) z_r_reg(
+	    .clk (clk), 
+	    .rst (reset), 
+	    .en  (~done), 
+        .d   (z_r_tmp), 
+        .q   (z_r)
+    );
 
-    always @(posedge clk) begin
-        if (reset) begin
-            z_r    <= 27'd0;
-            z_i    <= 27'd0;
-            z_r_sq <= 27'd0;
-            z_i_sq <= 27'd0;
-            iter   <= 16'd0;
-        end
-        else begin
-            z_r    <= z_r_tmp;
-            z_i    <= z_i_tmp;
-            z_r_sq <= z_r_sq_tmp;
-            z_i_sq <= z_i_sq_tmp;
-            iter   <= iter + 1'b1;
-        end
-    end
+    enable_reg #(27) z_i_reg(
+	    .clk (clk), 
+	    .rst (reset), 
+	    .en  (~done), 
+        .d   (z_i_tmp), 
+        .q   (z_i)
+    );
 
-    // if sqr magnitude (z_out) is greater than 4 (2^2):
-    //      write outside color to vga
-    assign done_outside = z_out > 27'b0100_00000000000000000000000;
+    enable_reg #(27) z_r_sq_reg(
+	    .clk (clk), 
+	    .rst (reset), 
+	    .en  (~done), 
+        .d   (z_r_sq_tmp), 
+        .q   (z_r_sq)
+    );
 
-    // if we exceed max iterations:
-    //      write inside color to vga
-    assign done_inside  = iter  > max_iter;
+    enable_reg #(27) z_i_sq_reg(
+	    .clk (clk), 
+	    .rst (reset), 
+	    .en  (~done), 
+        .d   (z_i_sq_tmp), 
+        .q   (z_i_sq)
+    );
+
+    enable_reg #(16) counter_reg(
+	    .clk (clk), 
+	    .rst (reset), 
+	    .en  (~done), 
+        .d   (iter + 1'b1), 
+        .q   (iter)
+    );
+    
+    // assign iter = counter;
+
+    // always @(posedge clk) begin
+    //     if (reset) begin
+    //         // z_r    <= 27'd0;
+    //         // z_i    <= 27'd0;
+    //         // z_r_sq <= 27'd0;
+    //         // z_i_sq <= 27'd0;
+    //         counter<= 16'd0;
+    //     end
+	// // THIS DOES NOT SYNTHESIZE //
+	// // MAKE SURE TO TAKE THIS OUT!! //
+    //     //else if (done) begin
+	// //        $stop;
+	// //    end
+	// ///////////////////////////
+    //     else begin
+    //         // z_r     <= z_r_tmp;
+    //         // z_i     <= z_i_tmp;
+    //         // z_r_sq  <= z_r_sq_tmp;
+    //         // z_i_sq  <= z_i_sq_tmp;
+    //         counter <= counter + 1'b1;
+    //     end
+    // end
+
+    // if sqr magnitude (z_out) is greater than 4 (2^2) or we exceed max iterations:
+
+    assign done = (z_out > 27'b0100_00000000000000000000000) | (iter  > max_iter);
     
     ////////////////////////////////////////////////////
     /////////////////// TOP BRANCH /////////////////////
@@ -138,12 +190,6 @@ module complex_iterator (
 endmodule
 
 
-
-
-
-
-
-
 //////////////////////////////////////////////////
 //// signed mult of 4.23 format 2'comp////////////
 //////////////////////////////////////////////////
@@ -159,3 +205,35 @@ module signed_mult (out, a, b);
 	assign out = {mult_out[53], mult_out[48:23]};
 endmodule
 //////////////////////////////////////////////////
+
+
+//////////////////////////////////////////////////
+/////////////// enable register //////////////////
+//////////////////////////////////////////////////
+
+module enable_reg #(parameter BITWIDTH = 27) (
+	input  wire clk, 
+	input  wire rst, 
+	input  wire en, 
+	input  wire signed [BITWIDTH-1:0] d, 
+	output wire signed [BITWIDTH-1:0] q);
+
+    reg signed [BITWIDTH-1:0] d_reg;
+
+    always @(posedge clk) begin
+        if (rst) begin
+            d_reg <= 27'd0;
+        end
+        else if (en) begin
+            d_reg <= d;
+        end
+        else begin
+            d_reg <= q;
+        end
+    end
+
+    assign q = d_reg;
+
+endmodule 
+
+
