@@ -10,6 +10,7 @@ module Computer_System (
 	audio_pll_ref_reset_reset,
 	av_config_SDAT,
 	av_config_SCLK,
+	clock_bridge_0_in_clk_clk,
 	hex3_hex0_export,
 	hps_io_hps_io_emac1_inst_TX_CLK,
 	hps_io_hps_io_emac1_inst_TXD0,
@@ -84,6 +85,12 @@ module Computer_System (
 	memory_mem_odt,
 	memory_mem_dm,
 	memory_oct_rzqin,
+	onchip_memory2_0_s1_address,
+	onchip_memory2_0_s1_clken,
+	onchip_memory2_0_s1_chipselect,
+	onchip_memory2_0_s1_write,
+	onchip_memory2_0_s1_readdata,
+	onchip_memory2_0_s1_writedata,
 	pushbuttons_export,
 	sdram_addr,
 	sdram_ba,
@@ -106,22 +113,7 @@ module Computer_System (
 	vga_G,
 	vga_B,
 	vga_pll_ref_clk_clk,
-	vga_pll_ref_reset_reset,
-	clock_bridge_0_in_clk_clk,
-	onchip_memory2_0_s1_address,
-	onchip_memory2_0_s1_clken,
-	onchip_memory2_0_s1_chipselect,
-	onchip_memory2_0_s1_write,
-	onchip_memory2_0_s1_readdata,
-	onchip_memory2_0_s1_writedata,
-	onchip_memory2_0_s1_byteenable,
-	onchip_sram_s1_address,
-	onchip_sram_s1_clken,
-	onchip_sram_s1_chipselect,
-	onchip_sram_s1_write,
-	onchip_sram_s1_readdata,
-	onchip_sram_s1_writedata,
-	onchip_sram_s1_byteenable);	
+	vga_pll_ref_reset_reset);	
 
 	input		audio_ADCDAT;
 	input		audio_ADCLRCK;
@@ -133,6 +125,7 @@ module Computer_System (
 	input		audio_pll_ref_reset_reset;
 	inout		av_config_SDAT;
 	output		av_config_SCLK;
+	input		clock_bridge_0_in_clk_clk;
 	output	[15:0]	hex3_hex0_export;
 	output		hps_io_hps_io_emac1_inst_TX_CLK;
 	output		hps_io_hps_io_emac1_inst_TXD0;
@@ -207,6 +200,12 @@ module Computer_System (
 	output		memory_mem_odt;
 	output	[3:0]	memory_mem_dm;
 	input		memory_oct_rzqin;
+	input	[18:0]	onchip_memory2_0_s1_address;
+	input		onchip_memory2_0_s1_clken;
+	input		onchip_memory2_0_s1_chipselect;
+	input		onchip_memory2_0_s1_write;
+	output	[7:0]	onchip_memory2_0_s1_readdata;
+	input	[7:0]	onchip_memory2_0_s1_writedata;
 	input	[3:0]	pushbuttons_export;
 	output	[12:0]	sdram_addr;
 	output	[1:0]	sdram_ba;
@@ -230,19 +229,4 @@ module Computer_System (
 	output	[7:0]	vga_B;
 	input		vga_pll_ref_clk_clk;
 	input		vga_pll_ref_reset_reset;
-	input		clock_bridge_0_in_clk_clk;
-	input	[16:0]	onchip_memory2_0_s1_address;
-	input		onchip_memory2_0_s1_clken;
-	input		onchip_memory2_0_s1_chipselect;
-	input		onchip_memory2_0_s1_write;
-	output	[31:0]	onchip_memory2_0_s1_readdata;
-	input	[31:0]	onchip_memory2_0_s1_writedata;
-	input	[3:0]	onchip_memory2_0_s1_byteenable;
-	input	[7:0]	onchip_sram_s1_address;
-	input		onchip_sram_s1_clken;
-	input		onchip_sram_s1_chipselect;
-	input		onchip_sram_s1_write;
-	output	[31:0]	onchip_sram_s1_readdata;
-	input	[31:0]	onchip_sram_s1_writedata;
-	input	[3:0]	onchip_sram_s1_byteenable;
 endmodule

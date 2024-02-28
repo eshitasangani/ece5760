@@ -398,10 +398,9 @@ reg [31:0] timer ; // may need to throttle write-rate
 // Controls for VGA memory
 //=======================================================
 wire [31:0] vga_out_base_address = 32'h0000_0000 ;  // vga base addr
-reg  [7:0] vga_sram_writedata ;
-// 9 bits of y and 10 bits of x = 19 bits
-reg  [18:0] vga_sram_address; 
-reg  vga_sram_write ;
+reg [7:0] vga_sram_writedata ;
+reg [31:0] vga_sram_address; 
+reg vga_sram_write ;
 wire vga_sram_clken = 1'b1;
 wire vga_sram_chipselect = 1'b1;
 
@@ -435,23 +434,18 @@ always @(posedge CLOCK_50) begin
 
 	// reset read/write controls
 	if (~KEY[0]) begin
-		// vga_sram_write <= 1'b0 ; // set to on if a write operation to bus
+		vga_sram_write <= 1'b0 ; // set to on if a write operation to bus
 		timer <= 0;
-		vga_sram_write <= 1'b1 ; // set to on if a write operation to bus
-		vga_sram_address <= vga_sram_address + 1'd1;
-		vga_sram_writedata <= 8'hff; // white
 	end
 
 	else begin
 		// increment timer every cycle
 		timer <= timer + 1'b1;
-		draw_done[0] <= draw_done_out[0];
-		draw_done[1] <= draw_done_out[1];
-		
+
 		casex({done[1],done[0]})
 			2'bx1: begin
 				vga_sram_write <= calc_done[0];
-				vga_sram_address <= vga_out_base_address + vga_x_cood[0] + (vga_y_cood[0]*640); 
+				vga_sram_address <= vga_out_base_address + {22'b0, vga_x_cood[0]} + ({22'b0,vga_y_cood[0]}*640); 
 				vga_sram_writedata <= pixel_color[0];
 	//			draw <= 2'b01;
 				// done[0] <= 1'b0;
@@ -460,17 +454,17 @@ always @(posedge CLOCK_50) begin
 				
 			2'b10: begin
 				vga_sram_write <= calc_done[1];
-				// vga_sram_address <= vga_out_base_address + {22'b0, vga_x_cood[1]} + ({22'b0,vga_y_cood[1]}*640); 
-				vga_sram_address <= vga_out_base_address + vga_x_cood[1] + (vga_y_cood[1]*640);  
+				vga_sram_address <= vga_out_base_address + {22'b0, vga_x_cood[1]} + ({22'b0,vga_y_cood[1]}*640); 
 				vga_sram_writedata <= pixel_color[1];
 				draw_done[1] <= 1'b1;
 			end
 	//			draw <= 2'b10;
 				// done[1] <= 1'b0;
 				
+
 			default: begin 
 				vga_sram_write <= 1'b0;
-				vga_sram_address <= vga_out_base_address + vga_x_cood[0] + (vga_y_cood[0]*640); 
+				vga_sram_address <= vga_out_base_address + {22'b0, vga_x_cood[0]} + ({22'b0,vga_y_cood[0]}*640); 
 				vga_sram_writedata <= pixel_color[0];
 				draw_done[0] <= draw_done_out[0];
 				draw_done[1] <= draw_done_out[1];
@@ -524,41 +518,6 @@ generate
 
 endgenerate
 
-
-// complex_iterator complex_iterator_inst (
-// 	.clk          (CLOCK_50),
-// 	.reset        (reset_solver[0]),
-// 	.max_iter     (max_iter),
-
-// 	.c_r          ( c_r[0]),
-// 	.c_i          ( c_i[0]),
-
-// 	.iter         (iter[0]),
-// 	.done         (done[0])
-// );
-// solver_state_machine solver_state_machine_inst ( 
-// 	.clk 		(CLOCK_50),
-// 	.reset		(~KEY[0]),
-// 	.i  		(0),
-// 	.done 		(done[0]),
-// 	.iter 		(iter[0]),
-// 	.max_iter 	(max_iter),
-// 	.draw_done  (draw_done[0]),
-// 	.vga_out_base_address (vga_out_base_address),
-
-// 	.c_r          (c_r[0]),
-// 	.c_i          (c_i[0]),
-// 	.pixel_color  (pixel_color[0]),
-// 	.vga_x_cood	  (vga_x_cood[0]),
-// 	.vga_y_cood	  (vga_y_cood[0]),
-// 	.calc_done    (calc_done[0]),
-// 	.reset_solver (reset_solver[0]),
-// 	.draw_done_out(draw_done_out[0]),
-// 	.vga_sram_write(vga_sram_write),
-// 	.vga_sram_address(vga_sram_address),
-// 	.vga_sram_writedata(vga_sram_writedata)
-
-// );
 
 
 //=======================================================
@@ -955,7 +914,6 @@ module solver_state_machine (
 	input wire [15:0] iter,
 	input wire [15:0] max_iter,
 	input wire        draw_done,
-	// input wire [31:0] vga_out_base_address,
 	
 	output wire [26:0] c_r,
 	output wire [26:0] c_i,
@@ -966,9 +924,6 @@ module solver_state_machine (
 	output wire       calc_done,
 	output wire       reset_solver,
 	output wire       draw_done_out
-	// output wire       vga_sram_write,
-	// output wire [18:0] vga_sram_address,
-	// output wire [7:0] vga_sram_writedata
 );
 
 	reg [3:0] state;
@@ -980,9 +935,6 @@ module solver_state_machine (
 	reg        calc_done_reg;
 	reg        reset_solver_reg;
 	reg        draw_done_out_reg;
-	// reg 		vga_sram_write_reg;
- 	// reg [18:0] vga_sram_address_reg;
- 	// reg [7:0] vga_sram_writedata_reg;
 	
 	assign vga_x_cood = vga_x_cood_reg;
 	assign vga_y_cood = vga_y_cood_reg;
@@ -991,53 +943,42 @@ module solver_state_machine (
 	assign c_r = c_r_reg;
 	assign c_i = c_i_reg;
 
-	assign calc_done 		= calc_done_reg;
-	assign reset_solver 	= reset_solver_reg;
-	assign draw_done_out 	= draw_done_out_reg;
-
-	// assign vga_sram_write = vga_sram_write_reg;
-	// assign vga_sram_address = vga_sram_address_reg;
-	// assign vga_sram_writedata = vga_sram_writedata_reg;
-
-	reg reset_state;
+	assign calc_done = calc_done_reg;
+	assign reset_solver = reset_solver_reg;
+	assign draw_done_out = draw_done_out_reg;
 
 	always @(posedge clk) begin
 
 		// reset state machine
 		if (reset) begin
-			
 			state <= 4'd0 ;
-			// vga_sram_write_reg <= 1'b1 ; // set to on if a write operation to bus
-			// vga_sram_address_reg <= vga_sram_address + 1'd1;
-			// vga_sram_writedata_reg <= 8'hff; // white
-
-			end
+				// vga_sram_write <= 1'b0 ; // set to on if a write operation to bus
+				// timer <= 0;
+		end
 
 		else begin 
 			case (state) 
 
 				4'd0: begin // init
-					// vga_sram_write <= 1'b0 ; // set to on if a write operation to bus
-					reset_solver_reg 	<= 1'b1;
-					calc_done_reg 		<= 1'b0;
-					draw_done_out_reg 	<= 1'b0;
-					vga_x_cood_reg 		<= i;
-					vga_y_cood_reg 		<= 10'd0;
+					reset_solver_reg <= 1'b1;
+					calc_done_reg <= 1'b0;
+					draw_done_out_reg <=1'b0;
+					vga_x_cood_reg <= i;
+					vga_y_cood_reg <= 10'd0;
+					c_r_reg =  27'b1110_00000000000000000000000 + (i * 27'b0000_00000001001100110011000); // -2 + i *3/640
+					c_i_reg =  27'b0001_00000000000000000000000; // 1
 
-					c_r_reg <= 27'b1110_00000000000000000000000 + (i * 27'b0000_00000001001100110011000); // -2 + i *3/640
-					c_i_reg <= 27'b0001_00000000000000000000000; // 1
-
-					state <= 4'd1;
+					state[i] <= 4'd1;
 
 				end
 
 				4'd1: begin // wait for solver
 					reset_solver_reg <= 1'b0;
-					if (done && ~reset_solver) begin
-						state <= 4'd2;
+					if (~done) begin
+						state <= 4'd1;
 					end
 					else begin 
-						state <= 4'd1;
+						state <= 4'd2;
 
 					end
 
@@ -1075,37 +1016,40 @@ module solver_state_machine (
 					else begin
 						pixel_color_reg <= 8'b_010_100_10 ;
 					end
+			
+					calc_done_reg <= 1'b1;
 					state <= 4'd3;
 				end
 
 				4'd3: begin
 					// only increment when we've finished writing to the vga 
 					if (draw_done) begin 
-						calc_done_reg 			<= 1'b1;
+						calc_done_reg = 1'b0;
+						// vga_sram_write <= 1'b1;
+						// vga_sram_address <= vga_out_base_address + {22'b0, vga_x_cood} + ({22'b0,vga_y_cood}*640); 
+						// vga_sram_writedata <= pixel_color;
 
+						vga_x_cood_reg <= vga_x_cood + 2;
+						c_r_reg <= c_r + 27'b0000_00000010011001100110000; // 2 * 3/640 (hardcoded as 6/640)
 
-						if (vga_x_cood > 10'd639) begin
-							vga_x_cood_reg 	<= i;
-							c_r_reg 		<=  27'b1110_00000000000000000000000 + (i * 27'b0000_00000001001100110011000); // -2 + i *3/640
+						if (vga_x_cood_reg > 10'd639) begin
+							vga_x_cood_reg <= i;
+							c_r_reg <=  27'b1110_00000000000000000000000 + (i * 27'b0000_00000001001100110011000); // -2 + i *3/640
 
-							vga_y_cood_reg 	<= vga_y_cood + 1;
-							c_i_reg 		<= c_i - 27'b0000_00000001000100010001000; // 2/480
+							vga_y_cood_reg <= vga_y_cood + 1;
+							c_i_reg <= c_i - 27'b0000_00000001001010011110000; // 2/440
 
 						end 
-						else begin
-							vga_x_cood_reg 	<= vga_x_cood + 2;
-							c_r_reg 		<= c_r + 27'b0000_00000010011001100110000; // 2 * 3/640 (hardcoded as 6/640)
-						end
 
 						// when we reach the end of the vga screen, stop writing!!!
-						if (vga_y_cood > 10'd480) begin
+						if (vga_y_cood > 10'd479) begin
 							state <= 4'd4;
 						end
 						// otherwise go back to state 1 and wait for solver to finish!
 						else begin
-							reset_solver_reg	 <= 1'b1;
-							draw_done_out_reg	 <= 1'b0;
-							state 				 <= 4'd1;
+							reset_solver_reg <= 1'b1;
+							draw_done_out_reg <= 1'b0;
+							state <= 4'd1;
 						end
 					end
 					else begin
@@ -1114,9 +1058,8 @@ module solver_state_machine (
 				end
 
 				4'd4: begin // finished everything!
-//					vga_sram_write_reg 	<= 1'b0;
-					calc_done_reg 		<= 1'b0;
-					state 				<= 4'd4;
+					calc_done_reg <= 1'b0;
+					state <= 4'd4;
 					
 				end
 
@@ -1124,7 +1067,12 @@ module solver_state_machine (
 
 		end
 
+
+
+
 	end
+
+
 
 
 endmodule

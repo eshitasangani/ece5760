@@ -9,6 +9,7 @@
 		.audio_pll_ref_reset_reset       (<connected-to-audio_pll_ref_reset_reset>),       //   audio_pll_ref_reset.reset
 		.av_config_SDAT                  (<connected-to-av_config_SDAT>),                  //             av_config.SDAT
 		.av_config_SCLK                  (<connected-to-av_config_SCLK>),                  //                      .SCLK
+		.clock_bridge_0_in_clk_clk       (<connected-to-clock_bridge_0_in_clk_clk>),       // clock_bridge_0_in_clk.clk
 		.hex3_hex0_export                (<connected-to-hex3_hex0_export>),                //             hex3_hex0.export
 		.hps_io_hps_io_emac1_inst_TX_CLK (<connected-to-hps_io_hps_io_emac1_inst_TX_CLK>), //                hps_io.hps_io_emac1_inst_TX_CLK
 		.hps_io_hps_io_emac1_inst_TXD0   (<connected-to-hps_io_hps_io_emac1_inst_TXD0>),   //                      .hps_io_emac1_inst_TXD0
@@ -83,6 +84,12 @@
 		.memory_mem_odt                  (<connected-to-memory_mem_odt>),                  //                      .mem_odt
 		.memory_mem_dm                   (<connected-to-memory_mem_dm>),                   //                      .mem_dm
 		.memory_oct_rzqin                (<connected-to-memory_oct_rzqin>),                //                      .oct_rzqin
+		.onchip_memory2_0_s1_address     (<connected-to-onchip_memory2_0_s1_address>),     //   onchip_memory2_0_s1.address
+		.onchip_memory2_0_s1_clken       (<connected-to-onchip_memory2_0_s1_clken>),       //                      .clken
+		.onchip_memory2_0_s1_chipselect  (<connected-to-onchip_memory2_0_s1_chipselect>),  //                      .chipselect
+		.onchip_memory2_0_s1_write       (<connected-to-onchip_memory2_0_s1_write>),       //                      .write
+		.onchip_memory2_0_s1_readdata    (<connected-to-onchip_memory2_0_s1_readdata>),    //                      .readdata
+		.onchip_memory2_0_s1_writedata   (<connected-to-onchip_memory2_0_s1_writedata>),   //                      .writedata
 		.pushbuttons_export              (<connected-to-pushbuttons_export>),              //           pushbuttons.export
 		.sdram_addr                      (<connected-to-sdram_addr>),                      //                 sdram.addr
 		.sdram_ba                        (<connected-to-sdram_ba>),                        //                      .ba
@@ -105,21 +112,6 @@
 		.vga_G                           (<connected-to-vga_G>),                           //                      .G
 		.vga_B                           (<connected-to-vga_B>),                           //                      .B
 		.vga_pll_ref_clk_clk             (<connected-to-vga_pll_ref_clk_clk>),             //       vga_pll_ref_clk.clk
-		.vga_pll_ref_reset_reset         (<connected-to-vga_pll_ref_reset_reset>),         //     vga_pll_ref_reset.reset
-		.clock_bridge_0_in_clk_clk       (<connected-to-clock_bridge_0_in_clk_clk>),       // clock_bridge_0_in_clk.clk
-		.onchip_memory2_0_s1_address     (<connected-to-onchip_memory2_0_s1_address>),     //   onchip_memory2_0_s1.address
-		.onchip_memory2_0_s1_clken       (<connected-to-onchip_memory2_0_s1_clken>),       //                      .clken
-		.onchip_memory2_0_s1_chipselect  (<connected-to-onchip_memory2_0_s1_chipselect>),  //                      .chipselect
-		.onchip_memory2_0_s1_write       (<connected-to-onchip_memory2_0_s1_write>),       //                      .write
-		.onchip_memory2_0_s1_readdata    (<connected-to-onchip_memory2_0_s1_readdata>),    //                      .readdata
-		.onchip_memory2_0_s1_writedata   (<connected-to-onchip_memory2_0_s1_writedata>),   //                      .writedata
-		.onchip_memory2_0_s1_byteenable  (<connected-to-onchip_memory2_0_s1_byteenable>),  //                      .byteenable
-		.onchip_sram_s1_address          (<connected-to-onchip_sram_s1_address>),          //        onchip_sram_s1.address
-		.onchip_sram_s1_clken            (<connected-to-onchip_sram_s1_clken>),            //                      .clken
-		.onchip_sram_s1_chipselect       (<connected-to-onchip_sram_s1_chipselect>),       //                      .chipselect
-		.onchip_sram_s1_write            (<connected-to-onchip_sram_s1_write>),            //                      .write
-		.onchip_sram_s1_readdata         (<connected-to-onchip_sram_s1_readdata>),         //                      .readdata
-		.onchip_sram_s1_writedata        (<connected-to-onchip_sram_s1_writedata>),        //                      .writedata
-		.onchip_sram_s1_byteenable       (<connected-to-onchip_sram_s1_byteenable>)        //                      .byteenable
+		.vga_pll_ref_reset_reset         (<connected-to-vga_pll_ref_reset_reset>)          //     vga_pll_ref_reset.reset
 	);
 
