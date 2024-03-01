@@ -113,7 +113,13 @@ module Computer_System (
 	vga_G,
 	vga_B,
 	vga_pll_ref_clk_clk,
-	vga_pll_ref_reset_reset);	
+	vga_pll_ref_reset_reset,
+	pio_cr_init_external_connection_export,
+	pio_ci_init_external_connection_export,
+	pio_ci_step_external_connection_export,
+	pio_cr_step_external_connection_export,
+	pio_reset_full_external_connection_export,
+	pio_done_done_external_connection_export);	
 
 	input		audio_ADCDAT;
 	input		audio_ADCLRCK;
@@ -229,4 +235,10 @@ module Computer_System (
 	output	[7:0]	vga_B;
 	input		vga_pll_ref_clk_clk;
 	input		vga_pll_ref_reset_reset;
+	output	[31:0]	pio_cr_init_external_connection_export;
+	output	[31:0]	pio_ci_init_external_connection_export;
+	output	[31:0]	pio_ci_step_external_connection_export;
+	output	[31:0]	pio_cr_step_external_connection_export;
+	output		pio_reset_full_external_connection_export;
+	input		pio_done_done_external_connection_export;
 endmodule

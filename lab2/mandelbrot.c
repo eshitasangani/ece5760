@@ -78,10 +78,12 @@ double elapsedTime;
 // ZOOM STUFF FOR MANDELBROT 
 ///////////////////////////////////////////////////////////////
 // MACROS FOR FIXED POINT CONVERSION // 
-#define PIO_CR_BASE             0x00010000  
-#define PIO_CI_BASE             0x00020000 
-#define PIO_CI_INIT_BASE        0x00030000
-#define PIO_CR_INIT_BASE        0x00040000
+#define PIO_CR_INIT_BASE        0x00001000 
+#define PIO_CI_INIT_BASE        0x00001010 
+#define PIO_CI_STEP_BASE        0x00001020
+#define PIO_CR_STEP_BASE        0x00001030
+#define PIO_RESET_FULL_BASE     0x00001040
+#define PIO_DONE_DONE_BASE      0x00001050
 
 typedef signed int fix23 ; // 4.23 fixed pt
 
@@ -91,25 +93,14 @@ typedef signed int fix23 ; // 4.23 fixed pt
 #define int2fix(a) ((fix23)(a << 23))
 #define fix2int(a) ((int)(a >> 23))
 
-// volatile unsigned int *pio_cr_addr      = NULL;
-// volatile unsigned int *pio_ci_addr      = NULL;
-// volatile unsigned int *pio_cr_init_addr  = NULL;
-// volatile unsigned int *pio_ci_init_addr  = NULL;
+float c_r_init = -2.0;
+float c_i_init = 1.0;
+float c_r_step = 6.0/640.0;
+float c_i_step = 2.0/480.0;
 
-pio_cr_addr   = (fix23*)(h2p_lw_virtual_base +  PIO_CR_BASE );
-pio_ci_addr   = (fix23*)(h2p_lw_virtual_base +  PIO_CI_BASE );
-pio_cr_init_addr   = (fix23*)(h2p_lw_virtual_base +  PIO_CI_INIT_BASE );
-pio_ci_init_addr   = (fix23*)(h2p_lw_virtual_base +  PIO_CR_INIT_BASE );
+int done_done = 0;
 
-fix23 c_r;
-fix23 c_i;
-fix23 c_i_init;
-fix23 c_r_init;
-
-*pio_cr_init_addr = float2fix(-2.0);
-*pio_ci_init_addr = float2fix(1.0);
-*pio_cr_addr = float2fix(3.0/640.0);
-*pio_cr_addr = float2fix(2.0/480.0);
+int set = 0;
 
 // INITIAL VALUES TO SEND TO FPGA
 
@@ -117,10 +108,17 @@ fix23 c_r_init;
 // main   // 
 ///////////////////////////////////////////////////////////////
 
+
 int main(void)
 {
   	// === FPGA ===
-   
+   	volatile unsigned int *pio_cr_init_addr = NULL;
+	volatile unsigned int *pio_ci_init_addr = NULL;
+	volatile unsigned int *pio_ci_step_addr  = NULL;
+	volatile unsigned int *pio_cr_step_addr  = NULL;
+	volatile unsigned int *pio_reset_full_addr  = NULL;
+	volatile unsigned int *pio_done_done_addr  = NULL;
+
 
 	// === need to mmap: =======================
 	// FPGA_CHAR_BASE
@@ -168,7 +166,6 @@ int main(void)
     // Get the address that maps to the FPGA pixel buffer
 	vga_pixel_ptr =(unsigned int *)(vga_pixel_virtual_base);
 
-    /
 	// ===========================================
 
 	/* create a message to be displayed on the VGA 
@@ -203,25 +200,83 @@ int main(void)
 	VGA_text (10, 3, text_next);
 
 
+	pio_cr_step_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CR_STEP_BASE );
+	pio_ci_step_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CI_STEP_BASE );
+	pio_ci_init_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CI_INIT_BASE );
+	pio_cr_init_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CR_INIT_BASE );
+	pio_reset_full_addr= (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_FULL_BASE );
+	pio_done_done_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_DONE_DONE_BASE );
+
+	*pio_cr_init_addr = float2fix(-2.0);
+	*pio_ci_init_addr = float2fix(1.0);
+	*pio_cr_step_addr = float2fix(6.0/640.0);
+	*pio_ci_step_addr = float2fix(2.0/480.0);
+
 	while(1) 
 	{
 		// start timer
 		gettimeofday(&t1, NULL);
 
+		// Send to the FPGA!
 
-    // Read from the FPGA!
-        c_r_init = *pio_cr_init_addr;
-        c_i_init = *pio_cr_init_addr;
-        c_i = *pio_ci_addr;
-        c_r = *pio_cr_addr;
+		printf("1: cr init, 2: ci init, 3: cr step, 4: ci step \n");
+		scanf("%i", &set);
 
-		// stop timer
-		gettimeofday(&t2, NULL);
-		elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000000.0;      // sec to us
-		elapsedTime += (t2.tv_usec - t1.tv_usec) ;   // us 
+		switch (set) {
+			case 1: 
+				printf("enter cr init: ");
+				scanf("%f", &c_r_init);
+				// *pio_cr_init_addr = float2fix(c_r_init);
+				// *pio_reset_full_addr = 1;
+				// *pio_reset_full_addr = 0;
+				break;
+			case 2:
+				printf("enter ci init: ");
+				scanf("%f", &c_i_init);
+				// *pio_ci_init_addr = float2fix(c_i_init);
+				// *pio_reset_full_addr = 1;
+				// *pio_reset_full_addr = 0;
+				break;
+			case 3: 
+				printf("enter cr step: ");
+				scanf("%f", &c_r_step);
+				// *pio_cr_step_addr = float2fix(c_r_step);
+				// *pio_reset_full_addr = 1;
+				// *pio_reset_full_addr = 0;
+				break;
+			case 4: 
+				printf("enter ci step: ");
+				scanf("%f", &c_i_step);
+				// *pio_ci_step_addr = float2fix(c_i_step);
+				// *pio_reset_full_addr = 1;
+				// *pio_reset_full_addr = 0;
+				break;
+		}
 
-		// set frame rate
+		*pio_cr_init_addr = float2fix(c_r_init);
+		*pio_ci_init_addr = float2fix(c_i_init);
+		*pio_cr_step_addr = float2fix(c_r_step);
+		*pio_ci_step_addr = float2fix(c_i_step);
+		*pio_reset_full_addr = 1;
+		*pio_reset_full_addr = 0;
+
+		time_t start_time = time(NULL);
+		while(!done_done){
+			done_done = *pio_done_done_addr;
+		}
+		time_t end_time = time(NULL);
+    	
+		double elapsed_time = difftime(end_time, start_time);
+
+		printf("time: %.2f seconds", elapsed_time);
+		// // stop timer
+		// gettimeofday(&t2, NULL);
+		// elapsedTime = (t2.tv_sec - t1.tv_sec) * 1000000.0;      // sec to us
+		// elapsedTime += (t2.tv_usec - t1.tv_usec) ;   // us 
+
+		// // set frame rate
 		usleep(10000);
+
 		
 	} // end while(1)
 } // end main

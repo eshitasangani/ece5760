@@ -425,13 +425,14 @@ wire done [1:0];
 wire reset_solver [1:0];
 reg draw_done [1:0];
 wire draw_done_out [1:0];
+wire done_done[1:0];
 
 // PANNING AND ZOOMING 
 reg [15:0] zoom_param;
 reg        zoom_in_flag; // 1 if zoom in, 0 if zoom out
 reg [26:0] pan_x;
 reg [26:0] pan_y;
-reg reset_full;
+wire reset_full;
 
 // PIO
 
@@ -448,38 +449,38 @@ always @(posedge CLOCK_50) begin
 	// PAN AND ZOOM 
 	//=======================================================
 
-	reset_full <= 1'b0;
-	// if (SW[0]) begin
-		if (~KEY[3]) begin // zoom in 
-			zoom_param <= zoom_param + 1'd1;
-			zoom_in_flag <= 1'b1;
-			reset_full <= 1'b1;
-		end
-	// end
-	
-	else if (~KEY[2]) begin // zoom out 
-		zoom_param <= zoom_param - 1'd1;
-		zoom_in_flag <= 1'b0;
-		reset_full <= 1'b1;
-	end
-
-	if (SW[9]) begin // pan right x 
-		pan_x <= pan_x + 27'b0000_00000000000000000000001;
-		reset_full <= 1'b1;
-	end
-	else if (SW[8]) begin // pan left x 
-		pan_x <= pan_x - 27'b0000_00000000000000000000001;
-		reset_full <= 1'b1;
-	end
-
-	if (SW[7]) begin // pan down y
-		pan_y <= pan_y + 27'b0000_00000000000000000000001;
-		reset_full <= 1'b1;
-	end
-	else if (SW[6]) begin // pan up y
-		pan_y <= pan_y - 27'b0000_00000000000000000000001;
-		reset_full <= 1'b1;
-	end
+//	reset_full <= 1'b0;
+//	// if (SW[0]) begin
+//		if (~KEY[3]) begin // zoom in 
+//			zoom_param <= zoom_param + 1'd1;
+//			zoom_in_flag <= 1'b1;
+//			reset_full <= 1'b1;
+//		end
+//	// end
+//	
+//	else if (~KEY[2]) begin // zoom out 
+//		zoom_param <= zoom_param - 1'd1;
+//		zoom_in_flag <= 1'b0;
+//		reset_full <= 1'b1;
+//	end
+//
+//	if (SW[9]) begin // pan right x 
+//		pan_x <= pan_x + 27'b0000_00000000000000000000001;
+//		reset_full <= 1'b1;
+//	end
+//	else if (SW[8]) begin // pan left x 
+//		pan_x <= pan_x - 27'b0000_00000000000000000000001;
+//		reset_full <= 1'b1;
+//	end
+//
+//	if (SW[7]) begin // pan down y
+//		pan_y <= pan_y + 27'b0000_00000000000000000000001;
+//		reset_full <= 1'b1;
+//	end
+//	else if (SW[6]) begin // pan up y
+//		pan_y <= pan_y - 27'b0000_00000000000000000000001;
+//		reset_full <= 1'b1;
+//	end
 
 
 	//=======================================================
@@ -590,10 +591,10 @@ generate
 
 			.zoom_param 	(zoom_param),
 			.zoom_in_flag   (zoom_in_flag),
-			.cr_step        (cr_step),
-			.ci_step        (ci_step),
-			.cr_init        (cr_init),
-			.ci_init        (ci_init),
+			.cr_step        (pio_cr_step_external_connection_export[26:0]),
+			.ci_step        (pio_ci_step_external_connection_export[26:0]),
+			.cr_init        (pio_cr_init_external_connection_export[26:0]),
+			.ci_init        (pio_ci_init_external_connection_export[26:0]),
 
 			.c_r          	(c_r[i]),
 			.c_i          	(c_i[i]),
@@ -602,7 +603,8 @@ generate
 			.vga_x_cood	  	(vga_x_cood[i]),
 			.vga_y_cood	  	(vga_y_cood[i]),
 			.reset_solver 	(reset_solver[i]),
-			.draw_done_out	(draw_done_out[i])
+			.draw_done_out	(draw_done_out[i]),
+			.done_done      (done_done[i])
 
 		);
 	
@@ -863,7 +865,9 @@ Computer_System The_System (
 	.pio_cr_init_external_connection_export (pio_cr_init_external_connection_export), // pio_cr_init_external_connection.export
 	.pio_ci_init_external_connection_export (pio_ci_init_external_connection_export), // pio_ci_init_external_connection.export
 	.pio_ci_step_external_connection_export (pio_ci_step_external_connection_export), // pio_ci_step_external_connection.export
-	.pio_cr_step_external_connection_export (pio_cr_step_external_connection_export)  // pio_cr_step_external_connection.export
+	.pio_cr_step_external_connection_export (pio_cr_step_external_connection_export),  // pio_cr_step_external_connection.export
+	.pio_reset_full_external_connection_export (reset_full),
+	.pio_done_done_external_connection_export (done_done[0] && done_done[1])
 );
 
 
@@ -1068,7 +1072,8 @@ module solver_state_machine (
 	output wire [9:0] vga_x_cood,
 	output wire [9:0] vga_y_cood,
 	output wire       reset_solver,
-	output wire       draw_done_out
+	output wire       draw_done_out,
+	output wire       done_done
 
 );
 
@@ -1080,6 +1085,7 @@ module solver_state_machine (
 	reg [26:0] c_i_reg;
 	reg        reset_solver_reg;
 	reg        draw_done_out_reg;
+	reg        done_done_reg;
 	
 	assign vga_x_cood = vga_x_cood_reg;
 	assign vga_y_cood = vga_y_cood_reg;
@@ -1090,6 +1096,7 @@ module solver_state_machine (
 
 	assign reset_solver 	= reset_solver_reg;
 	assign draw_done_out 	= draw_done_out_reg;
+	assign done_done = done_done_reg;
 
 	reg reset_state;
 
@@ -1114,9 +1121,10 @@ module solver_state_machine (
 					draw_done_out_reg 	<= 1'b0;
 					vga_x_cood_reg 		<= i;
 					vga_y_cood_reg 		<= 10'd0;
+					done_done_reg 		<= 1'b0;
 
-					c_r_reg <= 27'b1110_00000000000000000000000 + (i * 27'b0000_00000001001100110011000) + cr_step; // -2 + i *3/640
-					c_i_reg <= 27'b0001_00000000000000000000000 + ci_step; // 1
+					c_r_reg <= cr_init + (i * cr_step); // -2 + i *3/640 27'b0000_00000001001100110011000 + i*27'b1110_00000000000000000000000 
+					c_i_reg <= ci_init; // 1 27'b0001_00000000000000000000000
 
 					state <= 4'd1;
 
@@ -1175,22 +1183,17 @@ module solver_state_machine (
 						
 						if (vga_x_cood > 10'd640) begin
 							vga_x_cood_reg 	<= i;
-							if (zoom_in_flag) begin
-								c_r_reg 		<=  27'b1110_00000000000000000000000 + (i * (27'b0000_00000001001100110011000 >>> zoom_param)) + cr_step; // -2 + i *3/640
-							end
-							else begin
-								c_r_reg 		<=  27'b1110_00000000000000000000000 + (i * (27'b0000_00000001001100110011000 <<< zoom_param)) + cr_step; // -2 + i *3/640
-							end
+							c_r_reg 		<=  cr_init + (i * cr_step); // -2 + i *3/640
 							vga_y_cood_reg 	<= vga_y_cood + 1'd1;
 							// c_i_reg 		<= c_i - ci_step; // 2/480 27'b0000_00000001000100010001000
-							c_i_reg 		<= c_i - 27'b0000_00000001000100010001000;
+							c_i_reg 		<= c_i - ci_step;
 
 						end 
 						else begin
 							// change to increment by 2 !! for two iterators
 							vga_x_cood_reg 	<= vga_x_cood + 2'd2;
-  							// c_r_reg 		<= c_r + cr_step; // 2 * 3/640 (hardcoded as 6/640) 
-							c_r_reg 		<= (zoom_in_flag) ? (c_r + ((27'b0000_00000010011001100110000) >>> zoom_param)) : (c_r +  ((27'b0000_00000010011001100110000) << zoom_param)); // 2 * 3/640 (hardcoded as 6/640) 
+  							c_r_reg 		<= c_r + cr_step; // 2 * 3/640 (hardcoded as 6/640) 27'b0000_00000010011001100110000
+							// c_r_reg 		<= (zoom_in_flag) ? (c_r + ((27'b0000_00000010011001100110000) >>> zoom_param)) : (c_r +  ((27'b0000_00000010011001100110000) << zoom_param)); // 2 * 3/640 (hardcoded as 6/640) 
 
 						end
 
@@ -1212,6 +1215,7 @@ module solver_state_machine (
 
 				4'd3: begin // finished everything!
 					state 				<= 4'd3;
+					done_done_reg <= 1'b1;
 					
 				end
 
