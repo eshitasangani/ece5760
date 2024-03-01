@@ -3,7 +3,7 @@
 /// This code will segfault the original
 /// DE1 computer
 /// compile with
-/// gcc mandelbrot.c -o md -O2 -lm
+/// gcc mandelbrot.c -o md -O2 -lm -pthread
 ///
 ///////////////////////////////////////
 #include <stdio.h>
@@ -16,6 +16,8 @@
 #include <sys/mman.h>
 #include <sys/time.h> 
 #include <math.h>
+
+// lock for scanf
 
 // video display
 #define SDRAM_BASE            0xC0000000
@@ -83,27 +85,33 @@ double elapsedTime;
 
 typedef signed int fix23 ; // 4.23 fixed pt
 
-#define float2fix(a) ((fix20)((a)*8388608.0)) 
+#define float2fix(a) ((fix23)((a)*8388608.0)) 
 #define fix2float(a) ((double)(a)/8388608.0)
 
-#define int2fix(a) ((fix20)(a << 23))
+#define int2fix(a) ((fix23)(a << 23))
 #define fix2int(a) ((int)(a >> 23))
 
-volatile unsigned int *pio_cr_addr      = NULL;
-volatile unsigned int *pio_ci_addr      = NULL;
-volatile unsigned int *pio_cr_init_addr  = NULL;
-volatile unsigned int *pio_ci_init_addr  = NULL;
+// volatile unsigned int *pio_cr_addr      = NULL;
+// volatile unsigned int *pio_ci_addr      = NULL;
+// volatile unsigned int *pio_cr_init_addr  = NULL;
+// volatile unsigned int *pio_ci_init_addr  = NULL;
 
-pio_cr_addr   = (fix23 *)(h2p_lw_virtual_base +  PIO_CR_BASE );
-pio_ci_addr   = (fix23 *)(h2p_lw_virtual_base +  PIO_CI_BASE );
-pio_cr_init_addr   = (fix23 *)(h2p_lw_virtual_base +  PIO_CI_INIT_BASE );
-pio_ci_init_addr   = (fix23 *)(h2p_lw_virtual_base +  PIO_CR_INIT_BASE );
+pio_cr_addr   = (fix23*)(h2p_lw_virtual_base +  PIO_CR_BASE );
+pio_ci_addr   = (fix23*)(h2p_lw_virtual_base +  PIO_CI_BASE );
+pio_cr_init_addr   = (fix23*)(h2p_lw_virtual_base +  PIO_CI_INIT_BASE );
+pio_ci_init_addr   = (fix23*)(h2p_lw_virtual_base +  PIO_CR_INIT_BASE );
 
-// INITIAL VALUES TO SEND TO FPGA
+fix23 c_r;
+fix23 c_i;
+fix23 c_i_init;
+fix23 c_r_init;
+
 *pio_cr_init_addr = float2fix(-2.0);
 *pio_ci_init_addr = float2fix(1.0);
 *pio_cr_addr = float2fix(3.0/640.0);
 *pio_cr_addr = float2fix(2.0/480.0);
+
+// INITIAL VALUES TO SEND TO FPGA
 
 ///////////////////////////////////////////////////////////////
 // main   // 
@@ -194,27 +202,18 @@ int main(void)
 	VGA_text (10, 2, text_bottom_row);
 	VGA_text (10, 3, text_next);
 
-	// reset at the very beginning
-	*pio_reset_addr = 1;
-
-    // set the clocks
-    *pio_clk_addr = 1;
-    *pio_clk_addr = 0;
-
-	// deassert reset!
-    *pio_reset_addr = 0; 
 
 	while(1) 
 	{
 		// start timer
 		gettimeofday(&t1, NULL);
 
-        // set the clocks
-        *pio_clk_addr = 1;
-        *pio_clk_addr = 0;
 
-        // Read from the FPGA!
-  
+    // Read from the FPGA!
+        c_r_init = *pio_cr_init_addr;
+        c_i_init = *pio_cr_init_addr;
+        c_i = *pio_ci_addr;
+        c_r = *pio_cr_addr;
 
 		// stop timer
 		gettimeofday(&t2, NULL);

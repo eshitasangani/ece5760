@@ -556,7 +556,7 @@ generate
 		solver_state_machine solver_state_machine_inst ( 
 			.clk 			(CLOCK_50),
 			.reset			(reset_full || ~KEY[0]),
-			.i  			(0),
+			.i  			(i),
 			.done 			(done[i]),
 			.iter 			(iter[i]),
 			.max_iter 		(max_iter),
@@ -1228,5 +1228,4 @@ module solver_state_machine (
 
 
 endmodule
-
 
