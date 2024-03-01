@@ -526,8 +526,6 @@ always @(posedge CLOCK_50) begin
 
 			2'b00: begin
 				vga_sram_write <= 1'b0;
-				draw_done[0] <= draw_done_out[0];
-				draw_done[1] <= draw_done_out[1];
 			end
 				
 		endcase
@@ -1008,7 +1006,9 @@ module enable_reg #(parameter BITWIDTH = 27) (
     assign q = d_reg;
 
 endmodule 
-
+//assign cr_init = 
+//
+//assign ci_init = 
 
 module solver_state_machine (
 	input wire 		  clk,
@@ -1071,11 +1071,9 @@ module solver_state_machine (
 
 	signed_mult c_r_zoom (
         .out (zoom_int_cr),
-        .a   (27'b0000_00000010011001100110000>>>1),
+        .a   (27'b0000_00000010011001100110000),
         .b   (zoom_param)
     );
-
-
 
 	always @(posedge clk) begin
 
@@ -1115,7 +1113,6 @@ module solver_state_machine (
 						state <= 4'd1;
 
 					end
-
 				end
 
 				4'd2: begin // set pixel color, incr solver
@@ -1154,9 +1151,43 @@ module solver_state_machine (
 				end
 
 				4'd3: begin
-					
+					state <= 4'd4;
+				end
+
+				4'd4: begin
+					// if (iter >= max_iter) begin
+					// 	pixel_color_reg <= 8'b_000_000_00 ; // black
+					// end
+					// else if (iter >= (max_iter >>> 1)) begin
+					// 	pixel_color_reg <= 8'b_011_001_00 ; // white
+					// end
+					// else if (iter >= (max_iter >>> 2)) begin
+					// 	pixel_color_reg <= 8'b_011_001_00 ;
+					// end
+					// else if (iter >= (max_iter >>> 3)) begin
+					// 	pixel_color_reg <= 8'b_101_010_01 ;
+					// end
+					// else if (iter >= (max_iter >>> 4)) begin
+					// 	pixel_color_reg <= 8'b_011_001_01 ;
+					// end
+					// else if (iter >= (max_iter >>> 5)) begin
+					// 	pixel_color_reg <= 8'b_001_001_01 ;
+					// end
+					// else if (iter >= (max_iter >>> 6)) begin
+					// 	pixel_color_reg <= 8'b_011_010_10 ;
+					// end
+					// else if (iter >= (max_iter >>> 7)) begin
+					// 	pixel_color_reg <= 8'b_010_100_10 ;
+					// end
+					// else if (iter >= (max_iter >>> 8)) begin
+					// 	pixel_color_reg <= 8'b_010_100_10 ;
+					// end
+					// else begin
+					// 	pixel_color_reg <= 8'b_010_100_10 ;
+					// end
+
 					// only increment when we've finished writing to the vga 
-					if (draw_done) begin 
+					 if (draw_done) begin 
 						
 						if (vga_x_cood > 10'd639) begin
 							vga_x_cood_reg 	<= i;
@@ -1167,13 +1198,13 @@ module solver_state_machine (
 
 						end 
 						else begin
-							vga_x_cood_reg 	<= vga_x_cood + 1;
+							vga_x_cood_reg 	<= vga_x_cood + 2;
 							c_r_reg 		<= c_r + (zoom_int_cr); // 2 * 3/640 (hardcoded as 6/640) 
 						end
 
 						// when we reach the end of the vga screen, stop writing!!!
 						if (vga_y_cood > 10'd479) begin
-							state <= 4'd4;
+							state <= 4'd5;
 						end
 						// otherwise go back to state 1 and wait for solver to finish!
 						else begin
@@ -1181,14 +1212,14 @@ module solver_state_machine (
 							draw_done_out_reg	 <= 1'b0;
 							state 				 <= 4'd1;
 						end
-					end
+					  end
 					else begin
-						state <= 4'd3;
+						state <= 4'd4;
 					end
 				end
 
-				4'd4: begin // finished everything!
-					state 				<= 4'd4;
+				4'd5: begin // finished everything!
+					state 				<= 4'd5;
 					
 				end
 
