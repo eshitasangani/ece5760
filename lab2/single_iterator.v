@@ -34,8 +34,8 @@ complex_iterator complex_iterator_inst (
     .reset        (reset),
     .max_iter     (16'd1000),
 
-    .c_r          ( 27'b1111_00000000000000000000000),
-    .c_i          ( 27'b0000_00000000000000000000000),
+    .c_r          ( 27'b0001_00000000000000000000000),
+    .c_i          ( 27'b1111_00000000000000000000000),
 
     .iter         (iter),
     .done         (done)
@@ -68,9 +68,6 @@ module complex_iterator (
     wire signed [26:0] z_r_sq;
 
     wire signed [26:0] z_out;
-    // wire        [15:0] counter;
-
-    // top branch internal sigs
 
     wire signed [26:0] z_r_i_sq_sum;
     wire signed [26:0] z_r_tmp;
@@ -81,9 +78,15 @@ module complex_iterator (
     wire signed [26:0] z_i_tmp;
     wire signed [26:0] z_i_sq_tmp;
 
+    // testing 
+    wire intermediate_done;
+    wire intermediate_done_r;
+    wire intermediate_done_i;
+
     ////////////////////////////////////////////////////
     /////////////////// ENABLE REGISTERS ///////////////
     ////////////////////////////////////////////////////
+
     enable_reg #(27) z_r_reg(
 	    .clk (clk), 
 	    .rst (reset), 
@@ -124,35 +127,6 @@ module complex_iterator (
         .q   (iter)
     );
     
-    // assign iter = counter;
-
-    // always @(posedge clk) begin
-    //     if (reset) begin
-    //         // z_r    <= 27'd0;
-    //         // z_i    <= 27'd0;
-    //         // z_r_sq <= 27'd0;
-    //         // z_i_sq <= 27'd0;
-    //         counter<= 16'd0;
-    //     end
-	// // THIS DOES NOT SYNTHESIZE //
-	// // MAKE SURE TO TAKE THIS OUT!! //
-    //     //else if (done) begin
-	// //        $stop;
-	// //    end
-	// ///////////////////////////
-    //     else begin
-    //         // z_r     <= z_r_tmp;
-    //         // z_i     <= z_i_tmp;
-    //         // z_r_sq  <= z_r_sq_tmp;
-    //         // z_i_sq  <= z_i_sq_tmp;
-    //         counter <= counter + 1'b1;
-    //     end
-    // end
-
-    // if sqr magnitude (z_out) is greater than 4 (2^2) or we exceed max iterations:
-
-    assign done = (z_out > 27'b0100_00000000000000000000000) | (iter  > max_iter);
-    
     ////////////////////////////////////////////////////
     /////////////////// TOP BRANCH /////////////////////
     ////////////////////////////////////////////////////
@@ -175,7 +149,7 @@ module complex_iterator (
         .b   (z_i)
     );
 
-    assign z_i_tmp = (z_r_i_mul << 1) + c_i;
+    assign z_i_tmp = (z_r_i_mul <<< 1) + c_i;
 
     signed_mult z_i_n_1_sq (
         .out (z_i_sq_tmp),
@@ -184,7 +158,17 @@ module complex_iterator (
     );
 
 
-    assign z_out = z_i_sq_tmp + z_r_sq_tmp;
+    assign intermediate_done_r = ((z_i)  > 27'sb0010_00000000000000000000000) || ( (z_i) < -27'sb0010_00000000000000000000000);
+    assign intermediate_done_i = ( (z_r) > 27'sb0010_00000000000000000000000) || ( (z_r) < -27'sb0010_00000000000000000000000);
+
+    assign intermediate_done = (intermediate_done_i | intermediate_done_r);
+
+	assign z_out = z_i_sq_tmp + z_r_sq_tmp;
+
+    assign done = (intermediate_done) || (iter == max_iter);
+//assign done = (intermediate_done) | (z_out > 27'sb0100_00000000000000000000000) | (iter > max_iter);
+
+	// assign done = ( z_out > 27'b0100_00000000000000000000000) | (iter > max_iter);
 
 
 endmodule
