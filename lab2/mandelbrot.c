@@ -83,6 +83,7 @@ double elapsedTime;
 #define PIO_RESET_FULL_BASE     0x00001040
 #define PIO_DONE_DONE_BASE      0x00001050
 #define PIO_MAX_ITER_BASE      	0x00001060
+#define PIO_KEY0_BASE 			0x00001070
 
 typedef signed int fix23 ; // 4.23 fixed pt
 
@@ -112,6 +113,7 @@ volatile unsigned int *pio_cr_step_addr  = NULL;
 volatile unsigned int *pio_reset_full_addr  = NULL;
 volatile unsigned int *pio_done_done_addr  = NULL;
 volatile unsigned int *pio_max_iter_addr  = NULL;
+volatile unsigned int *pio_key0_addr  = NULL;
 
 void print_stats(){
 
@@ -120,6 +122,7 @@ void print_stats(){
 	while(!*pio_done_done_addr){}
 
 	gettimeofday(&t2, NULL);
+
 	elapsed_time = (t2.tv_sec - t1.tv_sec) * 1000000.0;      // sec to us
 	elapsed_time += (t2.tv_usec - t1.tv_usec) ;   // us 
 	elapsed_time = elapsed_time * 0.001;
@@ -130,6 +133,8 @@ void print_stats(){
 	printf("X: %f, %f\n", fix2float(*pio_cr_init_addr), (fix2float(*pio_cr_init_addr) + 640 * fix2float(*pio_cr_step_addr)));
 	printf("Y: %f, %f\n", fix2float(*pio_ci_init_addr), (fix2float(*pio_ci_init_addr) + 480 * fix2float(*pio_ci_step_addr)));
 }
+
+
 
 int main(void)
 {
@@ -162,6 +167,7 @@ int main(void)
 	pio_reset_full_addr= (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_FULL_BASE );
 	pio_done_done_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_DONE_DONE_BASE );
 	pio_max_iter_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_MAX_ITER_BASE );
+	pio_key0_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_KEY0_BASE );
 
 	*pio_cr_init_addr = float2fix(-2.0);
 	*pio_ci_init_addr = float2fix(1.0);
@@ -199,6 +205,14 @@ int main(void)
 
 		}
 
+		if (*pio_key0_addr == 1) {
+			c_r_init = -2.0;
+			c_i_init = 1.0;
+			c_r_step = 3.0/640.0;
+			c_i_step = 2.0/480.0;
+			max_iter = 1000;
+		}
+
 		*pio_cr_init_addr = float2fix(c_r_init);
 		*pio_ci_init_addr = float2fix(c_i_init);
 		*pio_cr_step_addr = float2fix(c_r_step);
@@ -208,7 +222,9 @@ int main(void)
 		*pio_reset_full_addr = 1;
 		*pio_reset_full_addr = 0;
 
+
 		print_stats();
+
 		
 	} // end while(1)
 	
