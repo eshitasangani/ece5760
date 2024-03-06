@@ -135,7 +135,9 @@ void print_stats(){
 	printf("Y: %f, %f\n", fix2float(*pio_ci_init_addr), (fix2float(*pio_ci_init_addr) + 480 * fix2float(*pio_ci_step_addr)));
 }
 
-/// KEY0 RESET THREAD
+///////////////////////////////////////////////////////////////
+// KEY0 RESET thread  // 
+///////////////////////////////////////////////////////////////
 void * reset_thread() {
 
     while (1) {
@@ -154,6 +156,9 @@ void * reset_thread() {
     }
 }
 
+///////////////////////////////////////////////////////////////
+// scan thread  // 
+///////////////////////////////////////////////////////////////
 void * scan_thread () { 
 
 	while (1) { 
@@ -202,10 +207,129 @@ void * scan_thread () {
 }
 
 
+///////////////////////////////////////////////////////////////
+// update_max_iter_thread  // 
+///////////////////////////////////////////////////////////////
 
+void * update_max_iter_thread () { 
 
+	while (1) { 
 
+		printf(":max iter \n");
+		scanf("%i", &set);
 
+		switch (set) {
+			case 1: 
+				printf("max iter: ");
+				scanf("%d", &max_iter);
+
+				*pio_max_iter_addr = (max_iter);
+				*pio_reset_full_addr = 1;
+				*pio_reset_full_addr = 0;
+				break;
+		} 
+		
+		print_stats();
+	}
+}
+
+///////////////////////////////////////////////////////////////
+// serial mouse read thread  // 
+///////////////////////////////////////////////////////////////
+
+void *read_mouse_thread() { 
+
+	//////// BEGIN  INIT ///////// 
+
+    int fd, bytes;
+    unsigned char data[3];
+
+    const char *pDevice = "/dev/input/mice";
+
+    // Open Mouse
+    fd = open(pDevice, O_RDWR);
+    if(fd == -1)
+    {
+        printf("ERROR Opening %s\n", pDevice);
+        return -1;
+    }
+
+    int left, middle, right;// button presses
+    signed char x, y, scroll, prev_x, prev_y; // mouse coordinates
+	int x_vga = 0;
+	int y_vga = 0;
+	int x_accum = 0;
+	int y_accum = 0;
+	float x_center = -0.5;
+	float y_center = 0.;
+
+    //////// END MOUSE INIT /////////
+
+	while (1) { 
+
+		// Read Mouse     
+        bytes = read(fd, data, sizeof(data));
+
+		if(bytes > 0)
+        {
+            left = data[0] & 0x1;
+            right = data[0] & 0x2;
+            middle = data[0] & 0x4;
+
+            x = data[1];
+            y = data[2];
+
+			// x_accum += x/2;
+			// y_accum += y/2;
+
+			// float x_temp = c_r_init + x_accum*c_r_step + c_r_step*320;
+        	// float y_temp = c_i_init + y_accum*c_i_step + c_i_step*240;
+
+			// if the left mouse button was pressed - reduce cr step and ci step by half
+			if (left == 1 ) { 
+				c_r_step = c_r_step/2;
+				c_i_step = c_i_step/2;
+
+				*pio_cr_step_addr = float2fix(c_r_step);
+				*pio_ci_step_addr = float2fix(c_i_step);
+
+				print_stats();
+				// x_accum = 0;
+				// y_accum = 0;
+
+			}
+
+			else if (right == 2 ) {
+				c_r_step = c_r_step*2;
+				c_i_step = c_i_step*2;
+				*pio_cr_step_addr = float2fix(c_r_step);
+				*pio_ci_step_addr = float2fix(c_i_step);
+				print_stats();
+				// x_accum = 0;
+				// y_accum = 0;
+
+			}
+
+			else if (middle == 4) {
+
+				c_r_init = c_r_init + x_accum*c_r_step;
+				c_i_init = c_i_init + y_accum*c_i_step;
+				*pio_cr_init_addr = float2fix(c_r_init);
+				*pio_ci_init_addr = float2fix(c_i_init);
+
+				print_stats();
+				
+				// x_accum = 0;
+				// y_accum = 0;
+			}
+			
+            printf("x=%d, y=%d, left=%d, middle=%d, right=%d\n", x, y, left, middle, right);
+
+        }
+
+	}
+
+}
 
 int main(void)
 {
@@ -254,7 +378,7 @@ int main(void)
 	print_stats();
 
 	// thread identifiers
-   	pthread_t thread_scan, thread_reset;
+   	pthread_t thread_scan, thread_reset, thread_read_mouse, thread_update_max_iter;
 
 	pthread_attr_t attr;
 	pthread_attr_init( &attr );
@@ -263,9 +387,13 @@ int main(void)
 	// now the threads
 	pthread_create( &thread_reset, NULL, reset_thread, NULL );
 	pthread_create( &thread_scan, NULL, scan_thread, NULL );
+	pthread_create( &thread_read_mouse, NULL, read_mouse_thread, NULL );
+	pthread_create( &thread_update_max_iter, NULL, update_max_iter_thread, NULL );
 
 	pthread_join( thread_reset, NULL );
 	pthread_join( thread_scan, NULL );
+	pthread_join( thread_read_mouse, NULL );
+	pthread_join( thread_update_max_iter, NULL );
 
 	return 0;
 	
