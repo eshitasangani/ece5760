@@ -82,7 +82,6 @@ double elapsedTime;
 #define PIO_CR_STEP_BASE        0x00001030
 #define PIO_RESET_FULL_BASE     0x00001040
 #define PIO_DONE_DONE_BASE      0x00001050
-#define PIO_KEY0_BASE      0x00001070
 #define PIO_MAX_ITER_BASE      	0x00001060
 
 typedef signed int fix23 ; // 4.23 fixed pt
@@ -95,34 +94,47 @@ typedef signed int fix23 ; // 4.23 fixed pt
 
 float c_r_init = -2.0;
 float c_i_init = 1.0;
-float c_r_step = 12.0/640.0;
+float c_r_step = 3.0/640.0;
 float c_i_step = 2.0/480.0;
-float max_iter = 1000.0;
+int max_iter = 1000;
 
 int done_done = 0;
-int init_reset = 0; // set back to inital conditions
 int set = 0;
-
-// INITIAL VALUES TO SEND TO FPGA
 
 ///////////////////////////////////////////////////////////////
 // main   // 
 ///////////////////////////////////////////////////////////////
+double elapsed_time;
+volatile unsigned int *pio_cr_init_addr = NULL;
+volatile unsigned int *pio_ci_init_addr = NULL;
+volatile unsigned int *pio_ci_step_addr  = NULL;
+volatile unsigned int *pio_cr_step_addr  = NULL;
+volatile unsigned int *pio_reset_full_addr  = NULL;
+volatile unsigned int *pio_done_done_addr  = NULL;
+volatile unsigned int *pio_max_iter_addr  = NULL;
 
+void print_stats(){
+
+	gettimeofday(&t1, NULL);
+
+	while(!*pio_done_done_addr){}
+
+	gettimeofday(&t2, NULL);
+	elapsed_time = (t2.tv_sec - t1.tv_sec) * 1000000.0;      // sec to us
+	elapsed_time += (t2.tv_usec - t1.tv_usec) ;   // us 
+	elapsed_time = elapsed_time * 0.001;
+	printf("\ntime: %.2f ms ", elapsed_time);
+
+	printf("\nMax Iterations: %d\n", *pio_max_iter_addr);
+
+	printf("X: %f, %f\n", fix2float(*pio_cr_init_addr), (fix2float(*pio_cr_init_addr) + 640 * fix2float(*pio_cr_step_addr)));
+	printf("Y: %f, %f\n", fix2float(*pio_ci_init_addr), (fix2float(*pio_ci_init_addr) + 480 * fix2float(*pio_ci_step_addr)));
+}
 
 int main(void)
 {
   	// === FPGA ===
-   	volatile unsigned int *pio_cr_init_addr = NULL;
-	volatile unsigned int *pio_ci_init_addr = NULL;
-	volatile unsigned int *pio_ci_step_addr  = NULL;
-	volatile unsigned int *pio_cr_step_addr  = NULL;
-	volatile unsigned int *pio_reset_full_addr  = NULL;
-	volatile unsigned int *pio_done_done_addr  = NULL;
-	volatile unsigned int *pio_max_iter_addr  = NULL;
-	volatile unsigned int *pio_key0_addr  = NULL;
-
-
+   	
 	// === need to mmap: =======================
 	// FPGA_CHAR_BASE
 	// FPGA_ONCHIP_BASE      
@@ -143,68 +155,6 @@ int main(void)
 		return(1);
 	}
     
-
-	// === get VGA char addr =====================
-	// get virtual addr that maps to physical
-	vga_char_virtual_base = mmap( NULL, FPGA_CHAR_SPAN, ( 	PROT_READ | PROT_WRITE ), MAP_SHARED, fd, FPGA_CHAR_BASE );	
-	if( vga_char_virtual_base == MAP_FAILED ) {
-		printf( "ERROR: mmap2() failed...\n" );
-		close( fd );
-		return(1);
-	}
-    
-    // Get the address that maps to the FPGA LED control 
-	vga_char_ptr =(unsigned int *)(vga_char_virtual_base);
-
-	// === get VGA pixel addr ====================
-	// get virtual addr that maps to physical
-	vga_pixel_virtual_base = mmap( NULL, SDRAM_SPAN, ( PROT_READ | PROT_WRITE ), MAP_SHARED, fd, SDRAM_BASE);	
-	if( vga_pixel_virtual_base == MAP_FAILED ) {
-		printf( "ERROR: mmap3() failed...\n" );
-		close( fd );
-		return(1);
-	}
-    
-	//  .reset (~KEY[0]),
-    // Get the address that maps to the FPGA pixel buffer
-	vga_pixel_ptr =(unsigned int *)(vga_pixel_virtual_base);
-
-	// ===========================================
-
-	/* create a message to be displayed on the VGA 
-          and LCD displays */
-	char text_top_row[40] = "DE1-SoC ARM/FPGA\0";
-	char text_bottom_row[40] = "Cornell ece5760\0";
-	char text_next[40] = "Graphics primitives\0";
-	char num_string[20], time_string[20], out_string[20] ;
-	char color_index = 0 ;
-	int color_counter = 0 ;
-	
-	// position of disk primitive
-	int disc_x = 0;
-	// position of circle primitive
-	int circle_x = 0 ;
-	// position of box primitive
-	int box_x = 5 ;
-	// position of vertical line primitive
-	int Vline_x = 0;
-	// position of horizontal line primitive
-	int Hline_y = 250;
-
-    int x_coor = 0;
-
-	// clear the screen
-	VGA_box (0, 0, 639, 479, 0x0000);
-	// clear the text
-	VGA_text_clear();
-	// write text
-	VGA_text (10, 1, text_top_row);
-	VGA_text (10, 2, text_bottom_row);
-	VGA_text (10, 3, text_next);
-
-	double elapsed_time;
-
-
 	pio_cr_step_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CR_STEP_BASE );
 	pio_ci_step_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CI_STEP_BASE );
 	pio_ci_init_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CI_INIT_BASE );
@@ -212,21 +162,15 @@ int main(void)
 	pio_reset_full_addr= (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_FULL_BASE );
 	pio_done_done_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_DONE_DONE_BASE );
 	pio_max_iter_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_MAX_ITER_BASE );
-	pio_key0_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_KEY0_BASE );
 
 	*pio_cr_init_addr = float2fix(-2.0);
 	*pio_ci_init_addr = float2fix(1.0);
-	*pio_cr_step_addr = float2fix(12.0/640.0);
+	*pio_cr_step_addr = float2fix(3.0/640.0);
 	*pio_ci_step_addr = float2fix(2.0/480.0);
-	*pio_max_iter_addr = float2fix(1000.0);
-
-
+	*pio_max_iter_addr = (1000.0);
 
 	while(1) 
-	{
-		// start timer
-		
-
+	{		
 		// Send to the FPGA!
 		printf("1: cr init, 2: ci init, 3: cr step, 4: ci step, 5:max iter \n");
 		scanf("%i", &set);
@@ -235,13 +179,6 @@ int main(void)
 			case 1: 
 				printf("enter cr init: ");
 				scanf("%f", &c_r_init);
-
-				printf("enter ci init: ");
-				scanf("%f", &c_i_init);
-
-				// *pio_cr_init_addr = float2fix(c_r_init);
-				// *pio_reset_full_addr = 1;
-				// *pio_reset_full_addr = 0;
 				break;
 			case 2:
 				printf("enter ci init: ");
@@ -257,58 +194,21 @@ int main(void)
 				break;
 			case 5: 
 				printf("max iter: ");
-				scanf("%f", &max_iter);
+				scanf("%d", &max_iter);
 				break;
-			case 5: 
-				printf("enter max iter: ");
-				scanf("%f", &max_iter);
-				// *pio_ci_step_addr = float2fix(c_i_step);
-				// *pio_reset_full_addr = 1;
-				// *pio_reset_full_addr = 0;
-				break;
+
 		}
 
 		*pio_cr_init_addr = float2fix(c_r_init);
 		*pio_ci_init_addr = float2fix(c_i_init);
 		*pio_cr_step_addr = float2fix(c_r_step);
 		*pio_ci_step_addr = float2fix(c_i_step);
-		*pio_max_iter_addr = float2fix(max_iter);
+		*pio_max_iter_addr = (max_iter);
 
 		*pio_reset_full_addr = 1;
 		*pio_reset_full_addr = 0;
 
-		// time_t start_time = time(NULL);
-		// start timer
-		gettimeofday(&t1, NULL);
-
-		while(!done_done){
-			done_done = *pio_done_done_addr;
-		}
-
-		if (!init_reset) { 
-			init_reset = *pio_key0_addr;
-
-			*pio_cr_init_addr = float2fix(-2.0);
-			*pio_ci_init_addr = float2fix(1.0);
-			*pio_cr_step_addr = float2fix(12.0/640.0);
-			*pio_ci_step_addr = float2fix(2.0/480.0);
-			*pio_max_iter_addr = float2fix(1000.0);
-
-		}
-		// time_t end_time = time(NULL);
-    	
-		// double elapsed_time = difftime(end_time, start_time);
-
-		// printf("time: %.2f seconds", elapsed_time);
-		// // stop timer
-		gettimeofday(&t2, NULL);
-		elapsed_time = (t2.tv_sec - t1.tv_sec) * 1000000.0;      // sec to us
-		elapsed_time += (t2.tv_usec - t1.tv_usec) ;   // us 
-		printf("time: %.2f ", elapsed_time);
-
-		// // set frame rate
-		usleep(10000);
-
+		print_stats();
 		
 	} // end while(1)
 	
