@@ -31,8 +31,6 @@
 #define HW_REGS_BASE          0xff200000
 #define HW_REGS_SPAN          0x00005000 
 
-
-
 // graphics primitives
 void VGA_text (int, int, char *);
 void VGA_text_clear();
@@ -84,8 +82,8 @@ double elapsedTime;
 #define PIO_CR_STEP_BASE        0x00001030
 #define PIO_RESET_FULL_BASE     0x00001040
 #define PIO_DONE_DONE_BASE      0x00001050
-#define PIO_MAX_ITER_BASE      0x00001060
 #define PIO_KEY0_BASE      0x00001070
+#define PIO_MAX_ITER_BASE      	0x00001060
 
 typedef signed int fix23 ; // 4.23 fixed pt
 
@@ -222,16 +220,15 @@ int main(void)
 	*pio_ci_step_addr = float2fix(2.0/480.0);
 	*pio_max_iter_addr = float2fix(1000.0);
 
-	*pio_reset_full_addr = 1;
-	*pio_reset_full_addr = 0;
+
 
 	while(1) 
 	{
+		// start timer
 		
 
 		// Send to the FPGA!
-
-		printf("1: cr init, 2: ci init, 3: cr step, 4: ci step 5. max iter");
+		printf("1: cr init, 2: ci init, 3: cr step, 4: ci step, 5:max iter \n");
 		scanf("%i", &set);
 
 		switch (set) {
@@ -249,23 +246,18 @@ int main(void)
 			case 2:
 				printf("enter ci init: ");
 				scanf("%f", &c_i_init);
-				// *pio_ci_init_addr = float2fix(c_i_init);
-				// *pio_reset_full_addr = 1;
-				// *pio_reset_full_addr = 0;
 				break;
 			case 3: 
 				printf("enter cr step: ");
 				scanf("%f", &c_r_step);
-				// *pio_cr_step_addr = float2fix(c_r_step);
-				// *pio_reset_full_addr = 1;
-				// *pio_reset_full_addr = 0;
 				break;
 			case 4: 
 				printf("enter ci step: ");
 				scanf("%f", &c_i_step);
-				// *pio_ci_step_addr = float2fix(c_i_step);
-				// *pio_reset_full_addr = 1;
-				// *pio_reset_full_addr = 0;
+				break;
+			case 5: 
+				printf("max iter: ");
+				scanf("%f", &max_iter);
 				break;
 			case 5: 
 				printf("enter max iter: ");
