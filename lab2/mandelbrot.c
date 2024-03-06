@@ -16,6 +16,7 @@
 #include <sys/mman.h>
 #include <sys/time.h> 
 #include <math.h>
+#include <pthread.h>
 
 // lock for scanf
 
@@ -135,7 +136,59 @@ void print_stats(){
 }
 
 
+/// KEY0 RESET THREAD
+void * reset_thread() {
 
+    while (1) {
+        
+        if ( *pio_key0_addr == 1 ) {
+
+            // reset pio initial/fixed conditions
+            *pio_cr_init_addr = float2fix(-2.0);
+			*pio_ci_init_addr = float2fix(1.0);
+			*pio_cr_step_addr = float2fix(3.0/640.0);
+			*pio_ci_step_addr = float2fix(2.0/480.0);
+			*pio_max_iter_addr = (1000);
+
+            *pio_reset_full_addr = 1;
+			*pio_reset_full_addr = 0;
+        }
+    }
+
+}
+
+void * scan_thread () { 
+
+	while (1) { 
+		printf("1: cr init, 2: ci init, 3: cr step, 4: ci step, 5:max iter \n");
+		scanf("%i", &set);
+
+		switch (set) {
+			case 1: 
+				printf("enter cr init: ");
+				scanf("%f", &c_r_init);
+				break;
+			case 2:
+				printf("enter ci init: ");
+				scanf("%f", &c_i_init);
+				break;
+			case 3: 
+				printf("enter cr step: ");
+				scanf("%f", &c_r_step);
+				break;
+			case 4: 
+				printf("enter ci step: ");
+				scanf("%f", &c_i_step);
+				break;
+			case 5: 
+				printf("max iter: ");
+				scanf("%d", &max_iter);
+				break;
+
+		}
+
+	}
+}
 int main(void)
 {
   	// === FPGA ===
@@ -169,64 +222,34 @@ int main(void)
 	pio_max_iter_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_MAX_ITER_BASE );
 	pio_key0_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_KEY0_BASE );
 
+	/// SEND INITIAL CONDITIONS /// 
+
 	*pio_cr_init_addr = float2fix(-2.0);
 	*pio_ci_init_addr = float2fix(1.0);
 	*pio_cr_step_addr = float2fix(3.0/640.0);
 	*pio_ci_step_addr = float2fix(2.0/480.0);
 	*pio_max_iter_addr = (1000.0);
 
-	while(1) 
-	{		
-		// Send to the FPGA!
-		printf("1: cr init, 2: ci init, 3: cr step, 4: ci step, 5:max iter \n");
-		scanf("%i", &set);
+	*pio_reset_full_addr = 1;
+	*pio_reset_full_addr = 0;
 
-		switch (set) {
-			case 1: 
-				printf("enter cr init: ");
-				scanf("%f", &c_r_init);
-				break;
-			case 2:
-				printf("enter ci init: ");
-				scanf("%f", &c_i_init);
-				break;
-			case 3: 
-				printf("enter cr step: ");
-				scanf("%f", &c_r_step);
-				break;
-			case 4: 
-				printf("enter ci step: ");
-				scanf("%f", &c_i_step);
-				break;
-			case 5: 
-				printf("max iter: ");
-				scanf("%d", &max_iter);
-				break;
+	print_stats();
 
-		}
+	// thread identifiers
+   	pthread_t thread_scan, thread_reset;
 
-		if (*pio_key0_addr == 1) {
-			c_r_init = -2.0;
-			c_i_init = 1.0;
-			c_r_step = 3.0/640.0;
-			c_i_step = 2.0/480.0;
-			max_iter = 1000;
-		}
+	pthread_attr_t attr;
+	pthread_attr_init( &attr );
+	pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_JOINABLE );
 
-		*pio_cr_init_addr = float2fix(c_r_init);
-		*pio_ci_init_addr = float2fix(c_i_init);
-		*pio_cr_step_addr = float2fix(c_r_step);
-		*pio_ci_step_addr = float2fix(c_i_step);
-		*pio_max_iter_addr = (max_iter);
+	// now the threads
+	pthread_create( &thread_reset, NULL, reset_thread, NULL );
+	pthread_create( &thread_scan, NULL, scan_thread, NULL );
 
-		*pio_reset_full_addr = 1;
-		*pio_reset_full_addr = 0;
+	pthread_join( thread_reset, NULL );
+	pthread_join( thread_scan, NULL );
 
-
-		print_stats();
-
-		
-	} // end while(1)
+	return 0;
 	
 } // end main
 
