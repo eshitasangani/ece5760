@@ -279,11 +279,11 @@ void *read_mouse_thread() {
             x = data[1];
             y = data[2];
 
-			// x_accum += x/2;
-			// y_accum += y/2;
+			x_accum += x/2;
+			y_accum += y/2;
 
-			// float x_temp = c_r_init + x_accum*c_r_step + c_r_step*320;
-        	// float y_temp = c_i_init + y_accum*c_i_step + c_i_step*240;
+			float x_temp = c_r_init + x_accum*c_r_step + c_r_step*320;
+        	float y_temp = c_i_init + y_accum*c_i_step + c_i_step*240;
 
 			// if the left mouse button was pressed - reduce cr step and ci step by half
 			if (left == 1 ) { 
@@ -292,10 +292,12 @@ void *read_mouse_thread() {
 
 				*pio_cr_step_addr = float2fix(c_r_step);
 				*pio_ci_step_addr = float2fix(c_i_step);
+				*pio_reset_full_addr = 1;
+				*pio_reset_full_addr = 0;
 
 				print_stats();
-				// x_accum = 0;
-				// y_accum = 0;
+				x_accum = 0;
+				y_accum = 0;
 
 			}
 
@@ -304,9 +306,10 @@ void *read_mouse_thread() {
 				c_i_step = c_i_step*2;
 				*pio_cr_step_addr = float2fix(c_r_step);
 				*pio_ci_step_addr = float2fix(c_i_step);
+				*pio_reset_full_addr = 1;
+				*pio_reset_full_addr = 0;
 				print_stats();
-				// x_accum = 0;
-				// y_accum = 0;
+
 
 			}
 
@@ -316,14 +319,14 @@ void *read_mouse_thread() {
 				c_i_init = c_i_init + y_accum*c_i_step;
 				*pio_cr_init_addr = float2fix(c_r_init);
 				*pio_ci_init_addr = float2fix(c_i_init);
+				*pio_reset_full_addr = 1;
+				*pio_reset_full_addr = 0;
 
 				print_stats();
-				
-				// x_accum = 0;
-				// y_accum = 0;
+
 			}
 			
-            printf("x=%d, y=%d, left=%d, middle=%d, right=%d\n", x, y, left, middle, right);
+            // printf("x=%d, y=%d, left=%d, middle=%d, right=%d\n", x, y, left, middle, right);
 
         }
 
