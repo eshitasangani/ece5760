@@ -16,8 +16,7 @@
 #include <sys/mman.h>
 #include <sys/time.h> 
 #include <math.h>
-
-// lock for scanf
+#include <pthread.h>
 
 // video display
 #define SDRAM_BASE            0xC0000000
@@ -45,14 +44,12 @@ void VGA_xy(float,float);
 void VGA_yz(float,float);
 void VGA_xz(float,float);
 
-
 // pixel macro
 #define VGA_PIXEL(x,y,color) do{\
 	int  *pixel_ptr ;\
 	pixel_ptr = (int*)((char *)vga_pixel_ptr + (((y)*640+(x))<<1)) ; \
 	*(short *)pixel_ptr = (color);\
-} while(0)
-
+} while(0)å
 
 // the light weight buss base
 void *h2p_lw_virtual_base;
@@ -72,10 +69,24 @@ int fd;
 struct timeval t1, t2;
 double elapsedTime;
 
-///////////////////////////////////////////////////////////////
-// ZOOM STUFF FOR MANDELBROT 
-///////////////////////////////////////////////////////////////
 // MACROS FOR FIXED POINT CONVERSION // 
+typedef signed int fix23 ; // 4.23 fixed pt
+#define float2fix(a) ((fix23)((a)*8388608.0)) 
+#define fix2float(a) ((double)(a)/8388608.0)
+#define int2fix(a) ((fix23)(a << 23))
+#define fix2int(a) ((int)(a >> 23))
+
+// pio pointers
+volatile unsigned int *pio_cr_init_addr = NULL;
+volatile unsigned int *pio_ci_init_addr = NULL;
+volatile unsigned int *pio_ci_step_addr  = NULL;
+volatile unsigned int *pio_cr_step_addr  = NULL;
+//--
+volatile unsigned int *pio_reset_full_addr  = NULL;
+volatile unsigned int *pio_done_done_addr  = NULL;
+volatile unsigned int *pio_max_iter_addr  = NULL;
+
+// Base addresses offsets
 #define PIO_CR_INIT_BASE        0x00001000 
 #define PIO_CI_INIT_BASE        0x00001010 
 #define PIO_CI_STEP_BASE        0x00001020
@@ -84,22 +95,15 @@ double elapsedTime;
 #define PIO_DONE_DONE_BASE      0x00001050
 #define PIO_MAX_ITER_BASE      	0x00001060
 
-typedef signed int fix23 ; // 4.23 fixed pt
-
-#define float2fix(a) ((fix23)((a)*8388608.0)) 
-#define fix2float(a) ((double)(a)/8388608.0)
-
-#define int2fix(a) ((fix23)(a << 23))
-#define fix2int(a) ((int)(a >> 23))
-
+// Initial Values
 float c_r_init = -2.0;
 float c_i_init = 1.0;
-// depending on how many iterators we have this shold change 
-float c_r_step = 12.0/640.0;
+float c_r_step = 12.0/640.0; // change depending on iterators
 float c_i_step = 2.0/480.0;
 float max_iter = 1000.0;
 
-int set = 0;
+// variables 
+int set = 0; // case statement
 int done_done = 0;
 
 /* create a message to be displayed on the VGA 
@@ -117,7 +121,6 @@ char max_iter_str[40];
 
 char color_index = 0 ;
 int color_counter = 0 ;
-
 
 /// PRINT DATA FUNCTION 
 void print_data_vga(float c_r_init, float c_i_init, float c_r_step, float c_i_step, int iter) {
@@ -177,23 +180,65 @@ void print_data(float c_r_init, float c_i_init, float c_r_step, float c_i_step, 
  
 }
 
+/// draw function 
+// void draw_mandelbrot()
+// {
+//     struct timeval t1, t2;
+//     double elapsed_time;
+
+//     *pio_reset_full_addr = 1;
+//     *pio_reset_full_addr = 0;
+
+//     // start timer immediately after reset
+//     gettimeofday(&t1, NULL);
+
+//     // wait for draw done
+//     while (!*pio_done_done_addr) {
+// 		// do nothing here 
+// 	}
+//     // stop timer and get elapsed time
+//     gettimeofday(&t2, NULL);
+//     elapsed_time = (t2.tv_sec - t1.tv_sec) * 1000000.0;      // sec to us
+// 	elapsed_time += (t2.tv_usec - t1.tv_usec) ;   // us 
+
+//     // display render time and maximum number of iterations
+//     printf("\nSolving: %f\n", elapsed_time);
+//     printf("Max Iterations: %d\n", *pio_max_iter_addr);
+
+//     printf("X: %f, %f\n", fix2float(*pio_cr_init_addr), (fix2float(*pio_cr_init_addr) + 640 * fix2float(*pio_cr_step_addr)));
+//     printf("Y: %f, %f\n", fix2float(*pio_ci_init_addr), (fix2float(*pio_ci_init_addr) + 480 * fix2float(*pio_ci_step_addr)));
+
+//     printf("\nMax Iter: ");
+// }
+
+// RESET INITIAL CONDITIONS THREAD!!!! 
+
+// void * restart_draw() {
+
+//     while (1) {
+//         // Reset all initial conditions when restart_draw signal is received
+//         if ( *pio_key0_addr == 1 ) {
+
+//             // reset pio initial/fixed conditions
+//             *pio_cr_init_addr = float2fix23(-2.);
+//             *pio_ci_init_addr = float2fix23(1.);
+//             *pio_cr_step_addr = float2fix23(3. / 640.);
+//             *pio_ci_step_addr = float2fix23(2. / 480.);
+//             *pio_max_iter_addr = 1000;
+
+//             draw_new();
+//         }
+//     }
+
+// }
+
+
 ///////////////////////////////////////////////////////////////
 // main   // 
 ///////////////////////////////////////////////////////////////
-
-
 int main(void)
 {
   	// === FPGA ===
-   	volatile unsigned int *pio_cr_init_addr = NULL;
-	volatile unsigned int *pio_ci_init_addr = NULL;
-	volatile unsigned int *pio_ci_step_addr  = NULL;
-	volatile unsigned int *pio_cr_step_addr  = NULL;
-	volatile unsigned int *pio_reset_full_addr  = NULL;
-	volatile unsigned int *pio_done_done_addr  = NULL;
-	volatile unsigned int *pio_max_iter_addr  = NULL;
-
-
 	// === need to mmap: =======================
 	// FPGA_CHAR_BASE
 	// FPGA_ONCHIP_BASE      
@@ -214,7 +259,6 @@ int main(void)
 		return(1);
 	}
     
-
 	// === get VGA char addr =====================
 	// get virtual addr that maps to physical
 	vga_char_virtual_base = mmap( NULL, FPGA_CHAR_SPAN, ( 	PROT_READ | PROT_WRITE ), MAP_SHARED, fd, FPGA_CHAR_BASE );	
@@ -236,20 +280,8 @@ int main(void)
 		return(1);
 	}
     
-	//  .reset (~KEY[0]),
     // Get the address that maps to the FPGA pixel buffer
 	vga_pixel_ptr =(unsigned int *)(vga_pixel_virtual_base);
-	
-	// position of disk primitive
-	int disc_x = 0;
-	// position of circle primitive
-	int circle_x = 0 ;
-	// position of box primitive
-	int box_x = 5 ;
-	// position of vertical line primitive
-	int Vline_x = 0;
-	// position of horizontal line primitive
-	int Hline_y = 250;
 
 	// clear the screen
 	VGA_box (0, 0, 639, 479, 0x0000);
@@ -259,8 +291,6 @@ int main(void)
 	VGA_text (10, 1, text_top_row);
 	VGA_text (10, 2, text_bottom_row);
 	VGA_text (10, 3, text_next);
-
-	double elapsed_time;
 
 	pio_cr_step_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CR_STEP_BASE );
 	pio_ci_step_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CI_STEP_BASE );
@@ -276,33 +306,11 @@ int main(void)
 	*pio_ci_step_addr = float2fix(2.0/480.0);
 	*pio_max_iter_addr = float2fix(1000.0);
 
-    //////// MOUSE STUFF ///////// 
-    /////////////////////////////
-
-    int fd, bytes;
-    unsigned char data[3];
-
-    const char *pDevice = "/dev/input/mice";
-
-    // Open Mouse
-    fd = open(pDevice, O_RDWR);
-    if(fd == -1)
-    {
-        printf("ERROR Opening %s\n", pDevice);
-        return -1;
-    }
-
-    int left, middle, right;// button presses
-    signed char x, y, scroll, prev_x, prev_y; // mouse coordinates
-	int x_vga = 0;
-	int y_vga = 0;
-	int x_accum = 0;
-	int y_accum = 0;
-
-    //////// MOUSE STUFF /////////
-    /////////////////////////////
 	while(1) 
 	{
+		struct timeval t1, t2;
+		double elapsed_time;
+
 		// Send to the FPGA!
 		printf("1: cr init, 2: ci init, 3: cr step, 4: ci step, 5:max iter \n");
 		scanf("%i", &set);
@@ -311,7 +319,6 @@ int main(void)
 			case 1: 
 				printf("enter cr init: ");
 				scanf("%f", &c_r_init);
-
 				break;
 			case 2:
 				printf("enter ci init: ");
@@ -329,11 +336,6 @@ int main(void)
 				printf("max iter: ");
 				scanf("%f", &max_iter);
 				break;
-			case 5: 
-				printf("enter max iter: ");
-				scanf("%f", &max_iter);
-
-				break;
 		}
 
 		*pio_cr_init_addr = float2fix(c_r_init);
@@ -345,25 +347,24 @@ int main(void)
 		*pio_reset_full_addr = 1;
 		*pio_reset_full_addr = 0;
 
-        print_data_vga(c_r_init, c_i_init, c_r_step, c_i_step, *(pio_max_iter_addr));
-        print_data(c_r_init, c_i_init, c_r_step, c_i_step, *(pio_max_iter_addr));
-
-		// time_t start_time = time(NULL);
-		// start timer
+		// start timer immediately after reset
 		gettimeofday(&t1, NULL);
 
-		while(!done_done){
-			done_done = *pio_done_done_addr;
+		// wait for draw done
+		while (!*pio_done_done_addr) {
+			// do nothing here 
 		}
-    	
+		// stop timer and get elapsed time
 		gettimeofday(&t2, NULL);
 		elapsed_time = (t2.tv_sec - t1.tv_sec) * 1000000.0;      // sec to us
 		elapsed_time += (t2.tv_usec - t1.tv_usec) ;   // us 
-		printf("time: %.2f ", elapsed_time);
 
-		// // set frame rate
-		usleep(10000);
+		// display render time and maximum number of iterations
+		printf("\nSolving: %f\n", elapsed_time);
+		printf("Max Iterations: %d\n", *pio_max_iter_addr);
 
+		printf("X: %f, %f\n", fix2float(*pio_cr_init_addr), (fix2float(*pio_cr_init_addr) + 640 * fix2float(*pio_cr_step_addr)));
+		printf("Y: %f, %f\n", fix2float(*pio_ci_init_addr), (fix2float(*pio_ci_init_addr) + 480 * fix2float(*pio_ci_step_addr)));
 		
 	} // end while(1)
 	
