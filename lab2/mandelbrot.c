@@ -215,20 +215,13 @@ void * update_max_iter_thread () {
 
 	while (1) { 
 
-		printf(":max iter \n");
-		scanf("%i", &set);
+		printf("max iter: ");
+		scanf("%d", &max_iter);
 
-		switch (set) {
-			case 1: 
-				printf("max iter: ");
-				scanf("%d", &max_iter);
+		*pio_max_iter_addr = (max_iter);
+		*pio_reset_full_addr = 1;
+		*pio_reset_full_addr = 0;
 
-				*pio_max_iter_addr = (max_iter);
-				*pio_reset_full_addr = 1;
-				*pio_reset_full_addr = 0;
-				break;
-		} 
-		
 		print_stats();
 	}
 }
@@ -279,46 +272,59 @@ void *read_mouse_thread() {
             x = data[1];
             y = data[2];
 
-			x_accum += x/2;
-			y_accum += y/2;
-
-			float x_temp = c_r_init + x_accum*c_r_step + c_r_step*320;
-        	float y_temp = c_i_init + y_accum*c_i_step + c_i_step*240;
-
 			// if the left mouse button was pressed - reduce cr step and ci step by half
+			
 			if (left == 1 ) { 
+				// ZOOM INNNN 
+
 				c_r_step = c_r_step/2;
 				c_i_step = c_i_step/2;
 
 				*pio_cr_step_addr = float2fix(c_r_step);
 				*pio_ci_step_addr = float2fix(c_i_step);
+
+				*pio_cr_init_addr = float2fix(x_center - fix2float(*pio_cr_step_addr) * 640.0 / 2.);
+                *pio_ci_init_addr = float2fix(y_center + fix2float(*pio_ci_step_addr) * 480.0 / 2.);
+
 				*pio_reset_full_addr = 1;
 				*pio_reset_full_addr = 0;
 
 				print_stats();
-				x_accum = 0;
-				y_accum = 0;
 
 			}
 
-			else if (right == 2 ) {
+			if (right == 2 ) {
+
+				// ZOOM OUT 
+
 				c_r_step = c_r_step*2;
 				c_i_step = c_i_step*2;
+
 				*pio_cr_step_addr = float2fix(c_r_step);
 				*pio_ci_step_addr = float2fix(c_i_step);
+
+                *pio_cr_init_addr = float2fix(x_center - fix2float(*pio_cr_step_addr) * 640.0 / 2.);
+                *pio_ci_init_addr = float2fix(y_center + fix2float(*pio_ci_step_addr) * 480.0 / 2.);
+
 				*pio_reset_full_addr = 1;
 				*pio_reset_full_addr = 0;
 				print_stats();
 
-
 			}
 
-			else if (middle == 4) {
+			// NEED TO DO PANNING
 
-				c_r_init = c_r_init + x_accum*c_r_step;
-				c_i_init = c_i_init + y_accum*c_i_step;
+			if (x != 0 || y != 0  ) {
+
+				c_r_init = c_r_init + c_r_step;
+				c_i_init = c_i_init + c_i_step;
+
 				*pio_cr_init_addr = float2fix(c_r_init);
 				*pio_ci_init_addr = float2fix(c_i_init);
+
+				x_center = fix2float(*pio_cr_init_addr) + fix2float(*pio_cr_init_addr) * 320.;
+				y_center = fix2float(*pio_ci_init_addr) - fix2float(*pio_ci_step_addr) * 240.;
+
 				*pio_reset_full_addr = 1;
 				*pio_reset_full_addr = 0;
 
@@ -326,8 +332,6 @@ void *read_mouse_thread() {
 
 			}
 			
-            // printf("x=%d, y=%d, left=%d, middle=%d, right=%d\n", x, y, left, middle, right);
-
         }
 
 	}
