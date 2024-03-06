@@ -248,7 +248,7 @@ void *read_mouse_thread() {
     }
 
     int left, middle, right;// button presses
-    signed char x, y, scroll, prev_x, prev_y; // mouse coordinates
+    signed char x, y, scroll, prev_x, prev_y, dx, dy; // mouse coordinates
 	int x_vga = 0;
 	int y_vga = 0;
 	int x_accum = 0;
@@ -269,22 +269,32 @@ void *read_mouse_thread() {
             right = data[0] & 0x2;
             middle = data[0] & 0x4;
 
+			prev_x = x;
+			prev_y = y;
+
             x = data[1];
             y = data[2];
+
+			dx = x - prev_x;
+			dy = y - prev_y;
+
+
 
 			// if the left mouse button was pressed - reduce cr step and ci step by half
 			
 			if (left == 1 ) { 
 				// ZOOM INNNN 
 
-				c_r_step = c_r_step/2;
-				c_i_step = c_i_step/2;
+				c_r_step = (c_r_step / 1.5);
+				c_i_step = (c_i_step / 1.5);
 
 				*pio_cr_step_addr = float2fix(c_r_step);
 				*pio_ci_step_addr = float2fix(c_i_step);
 
 				*pio_cr_init_addr = float2fix(x_center - fix2float(*pio_cr_step_addr) * 640.0 / 2.);
                 *pio_ci_init_addr = float2fix(y_center + fix2float(*pio_ci_step_addr) * 480.0 / 2.);
+				// *pio_cr_init_addr = float2fix(160. * c_r_step);
+                // *pio_ci_init_addr = float2fix(120. * c_i_step);
 
 				*pio_reset_full_addr = 1;
 				*pio_reset_full_addr = 0;
@@ -297,14 +307,16 @@ void *read_mouse_thread() {
 
 				// ZOOM OUT 
 
-				c_r_step = c_r_step*2;
-				c_i_step = c_i_step*2;
+				c_r_step = (c_r_step * 1.5);
+				c_i_step = (c_i_step * 1.5);
 
 				*pio_cr_step_addr = float2fix(c_r_step);
 				*pio_ci_step_addr = float2fix(c_i_step);
 
-                *pio_cr_init_addr = float2fix(x_center - fix2float(*pio_cr_step_addr) * 640.0 / 2.);
-                *pio_ci_init_addr = float2fix(y_center + fix2float(*pio_ci_step_addr) * 480.0 / 2.);
+                *pio_cr_init_addr = float2fix(x_center - c_r_step * 640.0 / 2.);
+                *pio_ci_init_addr = float2fix(y_center + c_i_step * 480.0 / 2.);
+				// *pio_cr_init_addr = float2fix(160. * c_r_step);
+                // *pio_ci_init_addr = float2fix(120. * c_i_step);
 
 				*pio_reset_full_addr = 1;
 				*pio_reset_full_addr = 0;
@@ -314,10 +326,10 @@ void *read_mouse_thread() {
 
 			// NEED TO DO PANNING
 
-			if (x != 0 || y != 0  ) {
+			if (dx != 0 || dy != 0 ) {
 
-				c_r_init = c_r_init + c_r_step;
-				c_i_init = c_i_init + c_i_step;
+				c_r_init = c_r_init + ((c_r_step * 4.) * dx);
+				c_i_init = c_i_init + ((c_i_step * 4.) * dy);
 
 				*pio_cr_init_addr = float2fix(c_r_init);
 				*pio_ci_init_addr = float2fix(c_i_init);
@@ -385,7 +397,7 @@ int main(void)
 	print_stats();
 
 	// thread identifiers
-   	pthread_t thread_scan, thread_reset, thread_read_mouse, thread_update_max_iter;
+   	pthread_t thread_reset, thread_read_mouse, thread_update_max_iter;
 
 	pthread_attr_t attr;
 	pthread_attr_init( &attr );
@@ -393,12 +405,10 @@ int main(void)
 
 	// now the threads
 	pthread_create( &thread_reset, NULL, reset_thread, NULL );
-	pthread_create( &thread_scan, NULL, scan_thread, NULL );
 	pthread_create( &thread_read_mouse, NULL, read_mouse_thread, NULL );
 	pthread_create( &thread_update_max_iter, NULL, update_max_iter_thread, NULL );
 
 	pthread_join( thread_reset, NULL );
-	pthread_join( thread_scan, NULL );
 	pthread_join( thread_read_mouse, NULL );
 	pthread_join( thread_update_max_iter, NULL );
 
