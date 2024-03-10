@@ -18,8 +18,6 @@
 #include <math.h>
 #include <pthread.h>
 
-// lock for scanf
-
 // video display
 #define SDRAM_BASE            0xC0000000
 #define SDRAM_END             0xC3FFFFFF
@@ -41,13 +39,10 @@ void VGA_line(int, int, int, int, short) ;
 void VGA_Vline(int, int, int, short) ;
 void VGA_Hline(int, int, int, short) ;
 void VGA_disc (int, int, int, short);
-void VGA_circle (int, int, int, int);
 void VGA_xy(float,float);
 void VGA_yz(float,float);
 void VGA_xz(float,float);
 
-
-// pixel macro
 #define VGA_PIXEL(x,y,color) do{\
 	int  *pixel_ptr ;\
 	pixel_ptr = (int*)((char *)vga_pixel_ptr + (((y)*640+(x))<<1)) ; \
@@ -73,10 +68,8 @@ int fd;
 struct timeval t1, t2;
 double elapsedTime;
 
-///////////////////////////////////////////////////////////////
-// ZOOM STUFF FOR MANDELBROT 
-///////////////////////////////////////////////////////////////
-// MACROS FOR FIXED POINT CONVERSION // 
+
+//// BASE ADDRESSES FOR PIO ADDRESSES ////
 #define PIO_CR_INIT_BASE        0x00001000 
 #define PIO_CI_INIT_BASE        0x00001010 
 #define PIO_CI_STEP_BASE        0x00001020
@@ -86,7 +79,8 @@ double elapsedTime;
 #define PIO_MAX_ITER_BASE      	0x00001060
 #define PIO_KEY0_BASE 			0x00001070
 
-typedef signed int fix23 ; // 4.23 fixed pt
+//// DEFINING 4.23 FIXED POINT MACROS ////
+typedef signed int fix23 ; 
 
 #define float2fix(a) ((fix23)((a)*8388608.0)) 
 #define fix2float(a) ((double)(a)/8388608.0)
@@ -94,19 +88,19 @@ typedef signed int fix23 ; // 4.23 fixed pt
 #define int2fix(a) ((fix23)(a << 23))
 #define fix2int(a) ((int)(a >> 23))
 
+// INITAL VARIABLES TO SEND TO FGPA 
 float c_r_init = -2.0;
 float c_i_init = 1.0;
 float c_r_step = 3.0/640.0;
 float c_i_step = 2.0/480.0;
 int max_iter = 1000;
 
-int done_done = 0;
-int set = 0;
+// variables for threads
+int done_done = 0; // check if done solving + drawing
+int set = 0; // what we want to change 
+double elapsed_time; // for timer 
 
-///////////////////////////////////////////////////////////////
-// main   // 
-///////////////////////////////////////////////////////////////
-double elapsed_time;
+//// PIO ADDRESSES INITIALIZATION //// 
 volatile unsigned int *pio_cr_init_addr = NULL;
 volatile unsigned int *pio_ci_init_addr = NULL;
 volatile unsigned int *pio_ci_step_addr  = NULL;
@@ -115,6 +109,10 @@ volatile unsigned int *pio_reset_full_addr  = NULL;
 volatile unsigned int *pio_done_done_addr  = NULL;
 volatile unsigned int *pio_max_iter_addr  = NULL;
 volatile unsigned int *pio_key0_addr  = NULL;
+
+///////////////////////////////////////////////////////////////
+//// prints time & xy coordinate box & max iterations ////
+///////////////////////////////////////////////////////////////
 
 void print_stats(){
 
@@ -141,6 +139,7 @@ void print_stats(){
 void * reset_thread() {
 
     while (1) {
+		// key0 reset connected to fpga
         if ( *pio_key0_addr == 1 ) {
 
             // reset pio initial/fixed conditions
@@ -293,9 +292,8 @@ void *read_mouse_thread() {
 
 				*pio_cr_init_addr = float2fix(x_center - fix2float(*pio_cr_step_addr) * 640.0 / 2.);
                 *pio_ci_init_addr = float2fix(y_center + fix2float(*pio_ci_step_addr) * 480.0 / 2.);
-				// *pio_cr_init_addr = float2fix(160. * c_r_step);
-                // *pio_ci_init_addr = float2fix(120. * c_i_step);
 
+				// reset 
 				*pio_reset_full_addr = 1;
 				*pio_reset_full_addr = 0;
 
@@ -315,8 +313,6 @@ void *read_mouse_thread() {
 
                 *pio_cr_init_addr = float2fix(x_center - c_r_step * 640.0 / 2.);
                 *pio_ci_init_addr = float2fix(y_center + c_i_step * 480.0 / 2.);
-				// *pio_cr_init_addr = float2fix(160. * c_r_step);
-                // *pio_ci_init_addr = float2fix(120. * c_i_step);
 
 				*pio_reset_full_addr = 1;
 				*pio_reset_full_addr = 0;
@@ -324,8 +320,7 @@ void *read_mouse_thread() {
 
 			}
 
-			// NEED TO DO PANNING
-
+			//// PANNING //// 
 			if (dx != 0 || dy != 0 ) {
 
 				c_r_init = c_r_init + ((c_r_step * 4.) * dx);
@@ -350,6 +345,9 @@ void *read_mouse_thread() {
 
 }
 
+///////////////////////////////////////////////////////////////
+//   main  // 
+///////////////////////////////////////////////////////////////
 int main(void)
 {
   	// === FPGA ===
@@ -374,6 +372,7 @@ int main(void)
 		return(1);
 	}
     
+	// UPDATE PIO ADDRESSES W BASE ADDRESS // 
 	pio_cr_step_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CR_STEP_BASE );
 	pio_ci_step_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CI_STEP_BASE );
 	pio_ci_init_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_CI_INIT_BASE );
@@ -636,73 +635,6 @@ void VGA_disc(int x, int y, int r, short pixel_color)
 			}
 					
 		}
-}
-
-/****************************************************************************************
- * Draw a  circle on the VGA monitor 
-****************************************************************************************/
-
-void VGA_circle(int x, int y, int r, int pixel_color)
-{
-	char  *pixel_ptr ; 
-	int row, col, rsqr, xc, yc;
-	int col1, row1;
-	rsqr = r*r;
-	
-	for (yc = -r; yc <= r; yc++){
-		//row = yc;
-		col1 = (int)sqrt((float)(rsqr + r - yc*yc));
-		// right edge
-		col = col1 + x; // add the center point
-		row = yc + y; // add the center point
-		//check for valid 640x480
-		if (col>639) col = 639;
-		if (row>479) row = 479;
-		if (col<0) col = 0;
-		if (row<0) row = 0;
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10) + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;
-		VGA_PIXEL(col,row,pixel_color);	
-		// left edge
-		col = -col1 + x; // add the center point
-		//check for valid 640x480
-		if (col>639) col = 639;
-		if (row>479) row = 479;
-		if (col<0) col = 0;
-		if (row<0) row = 0;
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10) + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;
-		VGA_PIXEL(col,row,pixel_color);	
-	}
-	for (xc = -r; xc <= r; xc++){
-		//row = yc;
-		row1 = (int)sqrt((float)(rsqr + r - xc*xc));
-		// right edge
-		col = xc + x; // add the center point
-		row = row1 + y; // add the center point
-		//check for valid 640x480
-		if (col>639) col = 639;
-		if (row>479) row = 479;
-		if (col<0) col = 0;
-		if (row<0) row = 0;
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10) + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;
-		VGA_PIXEL(col,row,pixel_color);	
-		// left edge
-		row = -row1 + y; // add the center point
-		//check for valid 640x480
-		if (col>639) col = 639;
-		if (row>479) row = 479;
-		if (col<0) col = 0;
-		if (row<0) row = 0;
-		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10) + col ;
-		// set pixel color
-		//*(char *)pixel_ptr = pixel_color;
-		VGA_PIXEL(col,row,pixel_color);	
-	}
 }
 
 // =============================================
