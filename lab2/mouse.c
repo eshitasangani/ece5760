@@ -158,48 +158,55 @@ int main(void)
 	*pio_reset_full_addr = 1;
 	*pio_reset_full_addr = 0;
 
-	print_stats();
-
 	printf("1: cr init, 2: ci init, 3: cr step, 4: ci step, 5:max iter \n");
-		scanf("%i", &set);
+	scanf("%i", &set);
 
 	switch (set) {
 		case 1: 
 			printf("enter cr init: ");
 			scanf("%f", &c_r_init);
-			*pio_cr_init_addr = float2fix(c_r_init);
-			*pio_reset_full_addr = 1;
-			*pio_reset_full_addr = 0;
+			// *pio_cr_init_addr = float2fix(c_r_init);
+			// *pio_reset_full_addr = 1;
+			// *pio_reset_full_addr = 0;
 			break;
 		case 2:
 			printf("enter ci init: ");
 			scanf("%f", &c_i_init);
-			*pio_ci_init_addr = float2fix(c_i_init);
-			*pio_reset_full_addr = 1;
-			*pio_reset_full_addr = 0;
+			// *pio_ci_init_addr = float2fix(c_i_init);
+			// *pio_reset_full_addr = 1;
+			// *pio_reset_full_addr = 0;
 			break;
 		case 3: 
 			printf("enter cr step: ");
 			scanf("%f", &c_r_step);
-			*pio_cr_step_addr = float2fix(c_r_step);
-			*pio_reset_full_addr = 1;
-			*pio_reset_full_addr = 0;
+			// *pio_cr_step_addr = float2fix(c_r_step);
+			// *pio_reset_full_addr = 1;
+			// *pio_reset_full_addr = 0;
 			break;
 		case 4: 
 			printf("enter ci step: ");
 			scanf("%f", &c_i_step);
-			*pio_ci_step_addr = float2fix(c_i_step);
-			*pio_reset_full_addr = 1;
-			*pio_reset_full_addr = 0;
+			// *pio_ci_step_addr = float2fix(c_i_step);
+			// *pio_reset_full_addr = 1;
+			// *pio_reset_full_addr = 0;
 			break;
 		case 5: 
 			printf("max iter: ");
 			scanf("%d", &max_iter);
-			*pio_max_iter_addr = (max_iter);
-			*pio_reset_full_addr = 1;
-			*pio_reset_full_addr = 0;
+			// *pio_max_iter_addr = (max_iter);
+			// *pio_reset_full_addr = 1;
+			// *pio_reset_full_addr = 0;
 			break;
 	}
+
+	*pio_cr_init_addr = float2fix(c_r_init);
+	*pio_ci_init_addr = float2fix(c_i_init);
+	*pio_cr_step_addr = float2fix(c_r_step);
+	*pio_ci_step_addr = float2fix(c_i_step);
+	*pio_max_iter_addr = (max_iter);
+
+	*pio_reset_full_addr = 1;
+	*pio_reset_full_addr = 0;
 
 	if ( *pio_key0_addr == 1 ) {
 
@@ -213,7 +220,6 @@ int main(void)
 		*pio_reset_full_addr = 1;
 		*pio_reset_full_addr = 0;
     }
-
 
 	gettimeofday(&t1, NULL);
 
