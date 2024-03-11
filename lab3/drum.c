@@ -219,7 +219,7 @@ int main(void)
 			// share the audio sample time with video process
 			//audio_time++ ;
 			//*shared_ptr = audio_time/48000 ;
-		} // end while (((*audio	
+		} // end while *audio	
 		
 		if (clock()- note_time > 3000000) {
 			// strike the drum
