@@ -148,13 +148,14 @@ always @(posedge clk) begin
 
         // start at bottom 
         read_prev_address <= 19'd0; 
-        read_curr_address <= 19'd1; // we always read out u_top from here so start at 1 above the bottom
+        read_curr_address <= 19'd0;
 
         // set bottom boundary condition 
         u_bottom <= 18'd0; 
         
         // set u_curr
-        u_curr <= 18'd0;
+        
+        u_curr <= 18'b0_00000000000100000;
         top_flag <= 1'b0;
     end
     else begin
@@ -195,16 +196,29 @@ always @(posedge clk) begin
 
 
             // START OF OUR REGULAR STATE MACHINE // 
-
-            5'd2: begin // wait one cycle for read data to come back
+            5'd2: begin
                 write_curr_en   <= 1'b0;
                 write_prev_en   <= 1'b0;
                 state <= 5'd3;
             end
 
-            5'd3: begin
+            5'd3: begin // when we loop back to the bottom, we have to read u_curr and u_top from m10k
+                u_curr <= u_top;
+                read_curr_address <= read_curr_address + 19'd1;
+                state <= 5'd4;
+            end
+
+
+            5'd4: begin // wait one cycle for read data to come back
+                write_curr_en   <= 1'b0;
+                write_prev_en   <= 1'b0;
+                state <= 5'd5;
+            end
+
+            5'd5: begin
                 // write u_next to n m10k (update NEXT timestep for this node)
                 write_curr_en   <= 1'b1;
+                write_curr_data <= u_next;
 
                 // write u_curr to n-1 m10k (update PREV timestep for this node)
                 write_prev_en   <= 1'b1;  
@@ -212,13 +226,21 @@ always @(posedge clk) begin
 
                 // move up one node (in CURR timestep)
                 u_curr          <= u_top;  
+                u_bottom        <= u_curr; 
 
+                state <= 5'd6;
+            end
+
+            5'd6: begin
+                write_curr_en   <= 1'b0;
+                write_prev_en   <= 1'b0;
+                
                 if (read_prev_address == 19'd28) begin
                     top_flag <= 1'b1;
                 end
                 
-                // state transition
-                if (read_prev_address >= 19'd29) begin // we've finished the column
+                // state transition 
+                if (top_flag) begin // we've finished the column
 
                     // restart from the bottom!
 
@@ -230,21 +252,20 @@ always @(posedge clk) begin
                     write_prev_address <= 19'd0;
 
                     read_prev_address <= 19'd0;
-                    read_curr_address <= 19'd1;
+                    read_curr_address <= 19'd0;
 
                     state <= 5'd2;
                 end
                 else begin
                     // move up one node (in CURR timestep)
-                    u_bottom        <= u_curr; 
-
+                    
                     write_prev_address <= write_prev_address + 19'd1;
                     write_curr_address <= write_curr_address + 19'd1;
 
                     read_prev_address <= read_prev_address + 19'd1;
                     read_curr_address <= read_curr_address + 19'd1;
 
-                    state <= 5'd2;
+                    state <= 5'd4;
                 end
                 
             end
@@ -281,10 +302,20 @@ module drum_syn (
     // intermediate internal signals
 
     wire signed [17:0] int_sum;
+    wire signed [17:0] int_dif_left;
+    wire signed [17:0] int_dif_right;
+    wire signed [17:0] int_dif_bottom;
+    wire signed [17:0] int_dif_top;
+
     wire signed [17:0] rho_mult;
     wire signed [17:0] int_mid;
 
-    assign int_sum = u_left + u_right + u_bottom + u_top - (u_curr << 2);
+    assign int_dif_left = u_left - u_curr;
+    assign int_dif_right = u_right - u_curr;
+    assign int_dif_bottom = u_bottom - u_curr;
+    assign int_dif_top = u_top - u_curr;
+
+    assign int_sum = int_dif_left + int_dif_right + int_dif_bottom + int_dif_top;
     assign int_mid = (rho_mult + (u_curr << 1) - u_prev + (u_prev >>> 9));
     assign u_next = int_mid - (int_mid >>> 9);
 
