@@ -235,9 +235,9 @@ always @(posedge clk) begin
                 write_curr_en   <= 1'b0;
                 write_prev_en   <= 1'b0;
                 
-                if (read_prev_address == 19'd28) begin
-                    top_flag <= 1'b1;
-                end
+                // if (read_prev_address == 19'd28) begin
+                //     top_flag <= 1'b1;
+                // end
                 
                 // state transition 
                 if (top_flag) begin // we've finished the column
@@ -252,9 +252,9 @@ always @(posedge clk) begin
                     write_prev_address <= 19'd0;
 
                     read_prev_address <= 19'd0;
-                    read_curr_address <= 19'd0;
+                    
 
-                    state <= 5'd2;
+                    state <= 5'd3;
                 end
                 else begin
                     // move up one node (in CURR timestep)
@@ -264,6 +264,11 @@ always @(posedge clk) begin
 
                     read_prev_address <= read_prev_address + 19'd1;
                     read_curr_address <= read_curr_address + 19'd1;
+
+                    if (read_prev_address == 19'd28) begin
+                        top_flag <= 1'b1;
+                        read_curr_address <= 19'd0;
+                    end
 
                     state <= 5'd4;
                 end
