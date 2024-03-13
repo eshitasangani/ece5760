@@ -58,8 +58,8 @@ volatile unsigned int * audio_right_data_ptr = NULL ; //12bytes
 
 // drum size paramenters
 // drum will FAIL if size is too big
-#define drum_size 30
-#define drum_middle 15
+#define drum_size 20
+#define drum_middle 10
 int copy_size = drum_size*drum_size*4 ;
 
 // fixed pt macros suitable for 32-bit sound
@@ -75,6 +75,14 @@ typedef signed int fix28 ;
 #define fix2audio28(a) (a<<4)
 // shift fraction to 16-bit sound
 #define fix2audio16(a) (a>>12)
+
+fix28 min(fix28 a, fix28 b);
+fix28 min(fix28 a, fix28 b) {
+  if ( a < b )  
+    return a;
+  else
+    return b;
+}
 
 // some fixed point values
 #define FOURfix28 0x40000000 
@@ -110,6 +118,11 @@ key_t mem_key=0xf0;
 int shared_mem_id; 
 int *shared_ptr;
 int audio_time;
+
+
+/// INITIAL RHO VALUES /// 
+fix28 rho_eff = float2fix28(0.25);
+fix28 rho_0 = float2fix28(0.25);
 
 // width of gaussian initial condition
 float alpha = 64;
@@ -191,6 +204,10 @@ int main(void)
 	// read the LINUX clock (microSec)
 	// and set the time so that a not plays soon
 	note_time = clock() - 2800000;
+
+	// MAX RHO VALUE BEING SET 
+
+	fix28 max_rho = float2fix28(0.49);
 	
 	while(1){	
 
@@ -202,7 +219,9 @@ int main(void)
 			// from http://people.ece.cornell.edu/land/courses/ece5760/LABS/s2018/WaveFDsoln.pdf
 			for (i=1; i<drum_size-1; i++){
 				for (j=1; j<drum_size-1; j++){
-					new_drum_temp = times_rho(drum_n[i-1][j] + drum_n[i+1][j] + drum_n[i][j-1] + drum_n[i][j+1] - times4pt0(drum_n[i][j]));
+					// new_drum_temp = times_rho(drum_n[i-1][j] + drum_n[i+1][j] + drum_n[i][j-1] + drum_n[i][j+1] - times4pt0(drum_n[i][j]));
+
+					new_drum_temp = multfix28(times_rho(drum_n[i-1][j] + drum_n[i+1][j] + drum_n[i][j-1] + drum_n[i][j+1] - times4pt0(drum_n[i][j])),rho_eff);
 					new_drum[i][j] = times0pt9999(new_drum_temp + times2pt0(drum_n[i][j]) - times0pt9998(drum_n_1[i][j])) ;
 				}
 			}
@@ -210,6 +229,8 @@ int main(void)
 			// update the state arrays
 			memcpy((void*)drum_n_1, (void*)drum_n, copy_size);
 			memcpy((void*)drum_n, (void*)new_drum, copy_size);
+
+			rho_eff = min(max_rho, rho_0 + (multfix28(drum_n[drum_middle][drum_middle]>>4, drum_n[drum_middle][drum_middle]>>4)));
 			
 			// send time sample to the audio FiFOs
 			*audio_left_data_ptr = fix2audio16(drum_n[drum_middle][drum_middle]);
