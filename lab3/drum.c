@@ -44,27 +44,14 @@ void VGA_line(int, int, int, int, short) ;
 #define times0pt999(a) ((a)-((a)>>10)) //>>10
 #define times_rho(a) (((a)>>5)) //>>2
 
-// fixed pt macros suitable for 32-bit sound
-typedef signed int fix28 ;
+typedef signed int fix17 ;
 //multiply two fixed 4:28
-#define multfix28(a,b) ((fix28)(((( signed long long)(a))*(( signed long long)(b)))>>28)) 
+#define multfix17(a,b) ((fix17)(((( signed long long)(a))*(( signed long long)(b)))>>28)) 
 //#define multfix28(a,b) ((fix28)((( ((short)((a)>>17)) * ((short)((b)>>17)) )))) 
-#define float2fix28(a) ((fix28)((a)*268435456.0f)) // 2^28
-#define fix2float28(a) ((float)(a)/268435456.0f) 
-#define int2fix28(a) ((a)<<28)
-#define fix2int28(a) ((a)>>28)
-// shift fraction to 32-bit sound
-#define fix2audio28(a) (a<<4)
-// shift fraction to 16-bit sound
-#define fix2audio16(a) (a>>12)
-
-fix28 min(fix28 a, fix28 b);
-fix28 min(fix28 a, fix28 b) {
-  if ( a < b )  
-    return a;
-  else
-    return b;
-}
+#define float2fix17(a) ((fix17)((a)*131072.0f)) // 2^28
+#define fix2float17(a) ((float)(a)/131072.0f) 
+#define int2fix28(a) ((a)<<17)
+#define fix2int28(a) ((a)>>17)
 
 // the light weight buss base
 void *h2p_lw_virtual_base;
@@ -151,7 +138,7 @@ int main(void)
         if (*pio_init_done_addr) { 
 
             if (idx <= 14) { 
-                *pio_init_addr = *pio_init_addr + float2fix28(0.0078125);
+                *pio_init_addr = *pio_init_addr + float2fix17(0.0078125);
                 idx++; 
             }
 
@@ -161,7 +148,7 @@ int main(void)
             }
 
             else if (idx > 15 && idx < 30) {
-                *pio_init_addr = *pio_init_addr - float2fix28(0.0078125);
+                *pio_init_addr = *pio_init_addr - float2fix17(0.0078125);
                 idx++;
             }
 
