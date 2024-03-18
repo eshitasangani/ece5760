@@ -4,11 +4,12 @@
 module testbench();
 
 reg clk, reset;
-
+reg [31:0] timer;
 
 //Initialize clocks and index
 initial begin
     clk = 1'b0;
+    timer = 32'd0;
 end
 
 //Toggle the clocks
@@ -35,10 +36,18 @@ reg        pio_init_done;
 // this simulates our pio ports
 reg [5:0] idx; // this tracks where we are in the column
 
+// nonlinear rho calculation 
+reg [17:0] rho_eff;
+wire [17:0] rho_0;
+wire [17:0] max_rho;
+wire [17:0] rho_gtension;
+
 always @(posedge clk) begin
+    timer <= timer + 32'd1;
     if (reset) begin
         idx <= 6'b0;
         pio_init <= 18'b0_00000000000000000;
+        rho_eff <= 18'b0_01000000000000000;
     end
     else if (pio_init_done) begin
 
@@ -67,6 +76,28 @@ end
 reg  [17:0] u_curr [29:0];
 
 reg [17:0] u_center;
+
+
+
+
+assign rho_0 = 18'b0_01000000000000000;
+assign max_rho = 18'b0_01111110000000000;
+
+signed_mult nonlinear_rho (
+        .out (rho_gtension),
+        .a   (u_center>>>4),
+        .b   (u_center>>>4)
+    );
+
+always @(*) begin
+
+    if (max_rho < (rho_0 + rho_gtension)) begin
+        rho_eff = rho_0 + rho_gtension;
+    end
+    else begin
+        rho_eff = max_rho;
+    end
+end 
 
 
 generate
@@ -118,7 +149,7 @@ generate
         );
 
         drum_syn drum_syn_inst (
-                    .rho          (18'b0_00010000000000000), // 0.0625
+                    .rho          (rho_eff), // 0.0625 = 18'b0_00010000000000000
                     .u_top        ((top_flag) ? (18'd0) : u_top), // if we're at the top, 0 boundary condition
                     .u_bottom     (u_bottom), // if we're at the bottom, 0 boundary condition (set in state machine reset)
                     .u_left       ((i == 0) ? (18'd0) : u_curr[i-1]),
