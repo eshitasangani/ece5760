@@ -24,25 +24,12 @@
 #include <netdb.h> 
 #include "address_map_arm_brl4.h"
 
-// fixed point
-#define float2fix30(a) ((int)((a)*1073741824)) // 2^30
-
 #define SWAP(X,Y) do{int temp=X; X=Y; Y=temp;}while(0) 
 
 /* function prototypes */
 void VGA_text (int, int, char *);
 void VGA_box (int, int, int, int, short);
 void VGA_line(int, int, int, int, short) ;
-
-// drum-specific multiply macros simulated by shifts
-#define times0pt5(a) ((a)>>1) 
-#define times0pt25(a) ((a)>>2) 
-#define times2pt0(a) ((a)<<1) 
-#define times4pt0(a) ((a)<<2) 
-#define times0pt9998(a) ((a)-((a)>>12)) //>>10
-#define times0pt9999(a) ((a)-((a)>>13)) //>>10
-#define times0pt999(a) ((a)-((a)>>10)) //>>10
-#define times_rho(a) (((a)>>5)) //>>2
 
 typedef signed int fix17 ;
 //multiply two fixed 4:28
@@ -66,8 +53,6 @@ void *vga_char_virtual_base;
 
 // /dev/mem file descriptor
 int fd;
-
-
 
 //// BASE ADDRESSES FOR PIO ADDRESSES ////
 #define PIO_INIT_BASE        0x00000000 
