@@ -3,12 +3,13 @@
 
 module testbench();
 
-reg clk, reset;
+reg clk, slow_clk, reset;
 reg [31:0] timer;
 
 //Initialize clocks and index
 initial begin
     clk = 1'b0;
+    slow_clk = 1'b0;
     timer = 32'd0;
 end
 
@@ -16,6 +17,10 @@ end
 always begin
     #10
     clk  = !clk;
+end
+always begin
+    #100
+    slow_clk = !slow_clk;
 end
 
 //Intialize and drive signals
@@ -66,6 +71,17 @@ always @(posedge clk) begin
     end
 end
 
+reg audio_request [29:0]; // we only use the [15], but use an array so we can reset in the generate block 
+
+// THIS SIMULATES OUR AUDIO BUS MASTER STATE MACHINE REQUEST
+always @(posedge slow_clk) begin
+    if (reset) begin
+        audio_request[15] <= 1'b0;
+    end
+    else begin
+        audio_request[15] <= 1'b1;
+    end
+end
 
 // BOTTOM IDX = 0
 // TOP IDX = 29 (N-1)
@@ -76,6 +92,7 @@ end
 reg  [17:0] u_curr [29:0];
 
 reg [17:0] u_center;
+
 
 
 
@@ -98,6 +115,7 @@ always @(*) begin
         rho_eff = max_rho;
     end
 end 
+
 
 
 generate
@@ -229,7 +247,7 @@ generate
                     end
 
                     // START OF OUR REGULAR STATE MACHINE // 
-                    5'd2: begin
+                    5'd2: begin // wait one cycle for read data to come back for u_curr
                         write_curr_en   <= 1'b0;
                         write_prev_en   <= 1'b0;
                         state <= 5'd3;
@@ -242,7 +260,7 @@ generate
                     end
 
 
-                    5'd4: begin // wait one cycle for read data to come back
+                    5'd4: begin // wait one cycle for read data to come back for u_top
                         write_curr_en   <= 1'b0;
                         write_prev_en   <= 1'b0;
                         state <= 5'd5;
@@ -278,12 +296,13 @@ generate
                         
                         // state transition 
                         if (top_flag) begin // we've finished the column
-
+                            if (audio_request[15]) begin 
                             // restart from the bottom!
 
                             u_bottom <= 18'd0; // set bottom boundary condition
 
                             top_flag <= 1'b0;
+                            audio_request[i] <= 1'b0;
 
                             write_curr_address <= 19'd0;
                             write_prev_address <= 19'd0;
@@ -292,6 +311,7 @@ generate
                             
 
                             state <= 5'd3;
+                            end
                         end
                         else begin
                             // move up one node (in CURR timestep)

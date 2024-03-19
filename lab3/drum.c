@@ -57,6 +57,9 @@ int fd;
 //// BASE ADDRESSES FOR PIO ADDRESSES ////
 #define PIO_INIT_BASE        0x00000000 
 #define PIO_INIT_DONE_BASE   0x00000010 
+#define PIO_INIT_VAL_BASE   0x00000020 
+#define PIO_RESET_BASE   	0x00000030 
+
 
 
 int main(void)
@@ -109,35 +112,67 @@ int main(void)
     //// PIO ADDRESSES INITIALIZATION //// 
     volatile unsigned int *pio_init_addr = NULL;
     volatile unsigned int *pio_init_done_addr = NULL;
+	volatile unsigned int *pio_init_val_addr = NULL;
+	volatile unsigned int *pio_reset_addr = NULL;
 
     pio_init_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_BASE );
     pio_init_done_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_DONE_BASE );
+	pio_init_val_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_VAL_BASE );
+	pio_reset_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_BASE );
 
     // inital values to the fpga
     *pio_init_addr = int2fix28(0);
+	*pio_init_val_addr = 0;
+	int idx = 0;
+
+	fix17 pio_init = 0;
 
     while (1) { 
 
-        int idx = 0;
+        // if (*pio_init_done_addr) { 
+		// if (idx < 30) {
+		// 	printf("%d", idx);
+		// }
+		
+		if (*pio_reset_addr){
+			*pio_init_addr = int2fix28(0);
+			idx = 0;
+		}
 
-        if (*pio_init_done_addr) { 
+		if (idx <= 14) { 
+			pio_init += float2fix17(0.0078125);
+			*pio_init_addr = pio_init;
+			*pio_init_val_addr = 1;
+			idx += 1; 
+			*pio_init_val_addr = 0;
+		}
 
-            if (idx <= 14) { 
-                *pio_init_addr = *pio_init_addr + float2fix17(0.0078125);
-                idx++; 
-            }
+		if (idx == 15) { 
+			*pio_init_addr = pio_init;
+			*pio_init_val_addr = 1;
+			idx += 1; 
+			*pio_init_val_addr = 0;
+		}
 
-            else if (idx == 15) { 
-                *pio_init_addr = *pio_init_addr;
-                idx++; 
-            }
+		if (idx > 15 && idx < 30) {
+			pio_init -= float2fix17(0.0078125);
+			*pio_init_addr = pio_init;
+			*pio_init_val_addr = 1;
+			idx += 1;
+			*pio_init_val_addr = 0;
+		}
 
-            else if (idx > 15 && idx < 30) {
-                *pio_init_addr = *pio_init_addr - float2fix17(0.0078125);
-                idx++;
-            }
+		// if (16 <= idx < 30) {
+		// 	pio_init -= float2fix17(0.0078125);
+		// 	*pio_init_addr = pio_init;
+		// 	// *pio_init_val_addr = 1;
+		// 	idx += 1;
+		// 	// *pio_init_val_addr = 0;
+		// }
+		printf("%d", idx);
 
-        }
+        // }
+		
 
     }
 
