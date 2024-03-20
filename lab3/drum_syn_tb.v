@@ -451,7 +451,7 @@ module M10K_1000_8(
     input we, clk
 );
 	 // force M10K ram style
-    reg [17:0] mem [68266:0]  /* synthesis ramstyle = "no_rw_check, M10K" */;
+    reg [17:0] mem [29:0]  /* synthesis ramstyle = "no_rw_check, M10K" */;
 	// reg [7:0] mem [153600:0]; // 2 solvers
 	// reg [7:0] mem [76800:0]; // 4 solvers
     always @ (posedge clk) begin
