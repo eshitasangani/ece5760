@@ -15,12 +15,16 @@ end
 
 //Toggle the clocks
 always begin
-    #10
+    #2000
     clk  = !clk;
 end
+
+reg audio_request; 
 always begin
-    #100
-    slow_clk = !slow_clk;
+    #18833
+    audio_request <= 1'b1;
+    #2000
+    audio_request <= 1'b0;
 end
 
 //Intialize and drive signals
@@ -28,7 +32,7 @@ initial begin
     reset  = 1'b0;
     #10 
     reset  = 1'b1;
-    #30
+    #41666
     reset  = 1'b0;
 end
 
@@ -42,10 +46,12 @@ reg        pio_init_done;
 reg [5:0] idx; // this tracks where we are in the column
 
 // nonlinear rho calculation 
-reg [17:0] rho_eff;
-wire [17:0] rho_0;
-wire [17:0] max_rho;
-wire [17:0] rho_gtension;
+// reg [17:0] rho_eff;
+// wire [17:0] rho_eff;
+
+// wire [17:0] rho_0;
+// wire [17:0] max_rho;
+// wire [17:0] rho_gtension;
 
 // always @(posedge clk) begin
 //     timer <= timer + 32'd1;
@@ -71,50 +77,102 @@ wire [17:0] rho_gtension;
 //     end
 // end
 
-reg audio_request [29:0]; // we only use the [15], but use an array so we can reset in the generate block 
+// reg audio_request [29:0]; // we only use the [15], but use an array so we can reset in the generate block 
 
-// THIS SIMULATES OUR AUDIO BUS MASTER STATE MACHINE REQUEST
-always @(posedge slow_clk) begin
-    if (reset) begin
-        audio_request[15] <= 1'b0;
-    end
-    else begin
-        audio_request[15] <= 1'b1;
-    end
-end
+// reg audio_request_ack [29:0]; // we only use the [15], but use an array so we can reset in the generate block 
+
+// // THIS SIMULATES OUR AUDIO BUS MASTER STATE MACHINE REQUEST
+// reg counter;
+// always @(posedge slow_clk) begin
+    
+//     if (reset) begin
+//         audio_request <= 1'b0;
+//         counter <= 1'd0;
+//     end
+//     else if (counter == 1'd1) begin
+//         audio_request <= 1'b1;
+//         counter <= 1'd0;
+//     end
+//     else begin
+//         audio_request <= audio_request_ack[15];
+//         counter <= counter + 1'd1;
+//     end
+// end
 
 // BOTTOM IDX = 0
 // TOP IDX = 29 (N-1)
 
 
+//=======================================================
+//  DRUM SYNTH
+//=======================================================
+
+// pll fast clock 
+// M10k memory clock
+// wire 					pll_fast_clk_100 ;
+// wire 					pll_fast_clk_100_locked ;
+
+// pio ports for initial values 
+// TODO: make sure to set these to wires when we instantiate the pio ports!!
+// wire [31:0] pio_init;
+// reg  [29:0] pio_init_done;
+// wire        pio_init_val;
+
+
+
+// BOTTOM IDX = 0
+// TOP IDX = 29 (N-1)
+
 // register this and update every iteration
 // this has to be outside our generate so we can connect between columns
-reg  [17:0] u_curr [29:0];
-
-reg [17:0] u_center;
-
+reg [17:0] u_curr [29:0];
+reg [17:0] u_center [29:0];
 
 
 
+
+//=======================================================
+//  NONLINEAR RHO
+//=======================================================
+// nonlinear rho calculation 
+reg  [17:0] rho_eff;
+wire [17:0] rho_0;
+wire [17:0] max_rho;
+wire [17:0] rho_gtension;
 
 assign rho_0 = 18'b0_01000000000000000;
 assign max_rho = 18'b0_01111110000000000;
 
 signed_mult nonlinear_rho (
         .out (rho_gtension),
-        .a   (u_center>>>4),
-        .b   (u_center>>>4)
+        .a   (u_center[15]>>>4),
+        .b   (u_center[15]>>>4)
     );
 
-always @(*) begin
+//=======================================================
+//  DRUM SYNTH STATE MACHINE
+//=======================================================
 
-    if (max_rho < (rho_0 + rho_gtension)) begin
-        rho_eff = rho_0 + rho_gtension;
-    end
-    else begin
-        rho_eff = max_rho;
-    end
-end 
+// reg [29:0] idx;
+
+always @(posedge clk) begin
+	if (reset) begin
+		// rho
+		rho_eff <= 18'b0_01000000000000000;
+	end
+	else begin
+		// if (idx[15] == 19'd15) begin // output the center node!
+		// 	u_center <= u_curr[15];
+		// end
+
+		if (max_rho < (rho_0 + rho_gtension)) begin
+        	rho_eff <= rho_0 + rho_gtension;
+		end
+		else begin
+			rho_eff <= max_rho;
+		end
+	end
+end
 
 
 
@@ -147,6 +205,7 @@ generate
 
         reg top_flag;
 
+		reg [18:0] addr_idx; 
 
         M10K_1000_8 M10k_u_prev ( 
             .q             (u_prev), // we always read out u_prev from this m10k
@@ -178,111 +237,104 @@ generate
         ); 
 
         always @(posedge clk) begin
+			// audio_request_ack[i] <= audio_request;
 
             if (reset) begin
                 state <= 5'd0;
-                idx   <= 6'd0;
                 write_prev_address <= 19'd0;
                 write_curr_address <= 19'd0;
+                addr_idx <= 19'd0;
 
                 write_curr_en <= 1'b1;
                 write_prev_en <= 1'b1;
 
-                write_curr_data <= pio_init;
-                write_prev_data <= pio_init;
+                write_curr_data <= 18'd0;
+                write_prev_data <= 18'd0;
 
                 // start at bottom 
                 read_prev_address <= 19'd0; 
                 read_curr_address <= 19'd0;
+				// idx[i] <= 18'd0;
 
                 // set bottom boundary condition 
                 u_bottom <= 18'd0; 
                 
                 // set u_curr
-                
                 u_curr[i] <= 18'b0_00000000000100000;
                 top_flag <= 1'b0;
-
-                // init 
-                idx <= 6'b0;
-                pio_init <= 18'b0_00000000000000000;
-                rho_eff <= 18'b0_01000000000000000;
+				// pio_init_done[i] <= 1'b0;
             end
             else begin
                 case (state)
                     // FIRST TWO STATES ARE OUR INIT STATE MACHINE // 
                     5'd0: begin // start writing initial values
-                        
-                        if (write_prev_address >= 19'd29) begin // once we are done writing all rows start processing
-
-                            write_curr_en <= 1'b0;
-                            write_prev_en <= 1'b0;
-
+                        if (addr_idx >= 19'd29) begin // once we are done writing all rows start processing
+                            addr_idx <= 19'd0;
                             write_prev_address <= 19'd0;
                             write_curr_address <= 19'd0;
-
+                            write_curr_en   <= 1'b0;
+                            write_prev_en   <= 1'b0;
+                            // u_curr[i] <= u_top;
                             state <= 5'd2;
                         end
-
-                        else begin 
-
-                            if (idx <= 14) begin
-                                pio_init <= pio_init + 18'b0_00000010000000000;
-                                idx <= idx + 6'd1;
+                        else begin
+                        write_curr_en <= 1'b1;
+                        write_prev_en <= 1'b1;
+						
+                        if ( i <= 19'd15 ) begin
+                            if (addr_idx < i) begin
+                                write_prev_data <= write_prev_data + 18'b0_00000000100000000;
+                                write_curr_data <= write_curr_data + 18'b0_00000000100000000;
                             end
-                            else if (idx == 15) begin
-                                pio_init <= pio_init;
-                                idx <= idx + 6'd1;
+                            else if ((19'd29 - addr_idx) <= i) begin
+                                write_prev_data <= write_prev_data - 18'b0_00000000100000000;
+                                write_curr_data <= write_curr_data - 18'b0_00000000100000000;
                             end
-                            else if (idx > 15 && idx < 30) begin
-                                pio_init <= pio_init - 18'b0_00000010000000000;
-                                idx <= idx + 6'd1;
+                        end
+                        else if (i > 19'd15) begin
+                            if (i <= (19'd29 - addr_idx)) begin
+                                write_prev_data <= write_prev_data + 18'b0_00000000100000000;
+                                write_curr_data <= write_curr_data + 18'b0_00000000100000000;
                             end
-
-                            write_prev_address <= write_prev_address + 19'd1;
-                            write_curr_address <= write_curr_address + 19'd1;
-
-                            write_prev_en <= 1'b1;
-                            write_curr_en <= 1'b1;
-
-                            if (i <= 15) begin
-                                write_prev_data <= pio_init - ((18'd15 - i)<<11); // multiply by our step size (18'b0_00000010000000000)
-                                write_curr_data <= pio_init - ((18'd15 - i)<<11);
+                            else if (i < addr_idx) begin
+                                write_prev_data <= write_prev_data - 18'b0_00000000100000000;
+                                write_curr_data <= write_curr_data - 18'b0_00000000100000000;
                             end
-                            else if (i > 15) begin
-                                write_prev_data <= pio_init - ((i - 18'd15)<<11);
-                                write_curr_data <= pio_init - ((i - 18'd15)<<11);
-                            end
-                            
+                        end
 
-                            pio_init_done <= 1'b1; 
+
+                        
+                            addr_idx <= addr_idx + 19'd1;
+							write_prev_address <= write_prev_address + 19'd1;
+							write_curr_address <= write_curr_address + 19'd1;
                             state <= 5'd0;
                         end
+                        // idx   <= idx + 6'd1;
+                            
                         
                     end
-                    5'd1: begin // second init state
-                        pio_init_done <= 1'b0;
-                        state <= 5'd0;
-                    end
+                    // 5'd1: begin // second init state
+                    //     state <= 5'd0;
+                    // end
 
                     // START OF OUR REGULAR STATE MACHINE // 
-                    5'd2: begin // wait one cycle for read data to come back for u_curr
+                    5'd2: begin // wait for one cycle for our read data to come back for u_curr
                         write_curr_en   <= 1'b0;
                         write_prev_en   <= 1'b0;
-                        state <= 5'd3;
+                        state           <= 5'd3;
                     end
 
                     5'd3: begin // when we loop back to the bottom, we have to read u_curr and u_top from m10k
-                        u_curr[i] <= u_top;
+                        u_curr[i]         <= u_top;
                         read_curr_address <= read_curr_address + 19'd1;
-                        state <= 5'd4;
+                        state             <= 5'd4;
                     end
 
 
                     5'd4: begin // wait one cycle for read data to come back for u_top
                         write_curr_en   <= 1'b0;
                         write_prev_en   <= 1'b0;
-                        state <= 5'd5;
+                        state 			<= 5'd5;
                     end
 
                     5'd5: begin
@@ -298,9 +350,9 @@ generate
                         u_curr[i]       <= u_top;  
                         u_bottom        <= u_curr[i]; 
 
-                        if (read_prev_address == 19'd15) begin // output the center node!
-                                u_center <= u_curr[15];
-                        end
+						if (read_prev_address == 19'd15) begin
+							u_center[i] <= u_curr[i];
+						end
 
                         state <= 5'd6;
                     end
@@ -309,28 +361,29 @@ generate
                         write_curr_en   <= 1'b0;
                         write_prev_en   <= 1'b0;
                         
-                        // if (read_prev_address == 19'd28) begin
-                        //     top_flag <= 1'b1;
-                        // end
-                        
                         // state transition 
                         if (top_flag) begin // we've finished the column
-                            if (audio_request[15]) begin 
-                            // restart from the bottom!
+							if (audio_request) begin // wait for audio bus master state machine to send a request for a new iteration 
 
-                            u_bottom <= 18'd0; // set bottom boundary condition
+								// restart from the bottom!
 
-                            top_flag <= 1'b0;
-                            audio_request[i] <= 1'b0;
+								u_bottom <= 18'd0; // set bottom boundary condition
 
-                            write_curr_address <= 19'd0;
-                            write_prev_address <= 19'd0;
+								top_flag <= 1'b0;
+								// audio_request_ack[i] <= 1'b0;
 
-                            read_prev_address <= 19'd0;
-                            
+								write_curr_address <= 19'd0;
+								write_prev_address <= 19'd0;
 
-                            state <= 5'd3;
-                            end
+								read_prev_address <= 19'd0;
+								// idx[i] <= 18'd0;
+								addr_idx <= 19'd0;
+
+								state <= 5'd3;
+							end
+							else begin
+								state <= 5'd6;
+							end
                         end
                         else begin
                             // move up one node (in CURR timestep)
@@ -340,6 +393,9 @@ generate
 
                             read_prev_address <= read_prev_address + 19'd1;
                             read_curr_address <= read_curr_address + 19'd1;
+
+							addr_idx <= addr_idx + 19'd1;
+									//  idx[i] <= idx[i] + 18'd1;
 
                             if (read_prev_address == 19'd28) begin
                                 top_flag <= 1'b1;
