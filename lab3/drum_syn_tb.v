@@ -47,29 +47,29 @@ wire [17:0] rho_0;
 wire [17:0] max_rho;
 wire [17:0] rho_gtension;
 
-always @(posedge clk) begin
-    timer <= timer + 32'd1;
-    if (reset) begin
-        idx <= 6'b0;
-        pio_init <= 18'b0_00000000000000000;
-        rho_eff <= 18'b0_01000000000000000;
-    end
-    else if (pio_init_done) begin
+// always @(posedge clk) begin
+//     timer <= timer + 32'd1;
+//     if (reset) begin
+//         idx <= 6'b0;
+//         pio_init <= 18'b0_00000000000000000;
+//         rho_eff <= 18'b0_01000000000000000;
+//     end
+//     else if (pio_init_done) begin
 
-        if (idx <= 14) begin
-            pio_init <= pio_init + 18'b0_00000010000000000;
-            idx <= idx + 6'd1;
-        end
-        else if (idx == 15) begin
-            pio_init <= pio_init;
-            idx <= idx + 6'd1;
-        end
-        else if (idx > 15 && idx < 30) begin
-            pio_init <= pio_init - 18'b0_00000010000000000;
-            idx <= idx + 6'd1;
-        end
-    end
-end
+//         if (idx <= 14) begin
+//             pio_init <= pio_init + 18'b0_00000010000000000;
+//             idx <= idx + 6'd1;
+//         end
+//         else if (idx == 15) begin
+//             pio_init <= pio_init;
+//             idx <= idx + 6'd1;
+//         end
+//         else if (idx > 15 && idx < 30) begin
+//             pio_init <= pio_init - 18'b0_00000010000000000;
+//             idx <= idx + 6'd1;
+//         end
+//     end
+// end
 
 reg audio_request [29:0]; // we only use the [15], but use an array so we can reset in the generate block 
 
@@ -202,6 +202,11 @@ generate
                 
                 u_curr[i] <= 18'b0_00000000000100000;
                 top_flag <= 1'b0;
+
+                // init 
+                idx <= 6'b0;
+                pio_init <= 18'b0_00000000000000000;
+                rho_eff <= 18'b0_01000000000000000;
             end
             else begin
                 case (state)
@@ -220,6 +225,20 @@ generate
                         end
 
                         else begin 
+
+                            if (idx <= 14) begin
+                                pio_init <= pio_init + 18'b0_00000010000000000;
+                                idx <= idx + 6'd1;
+                            end
+                            else if (idx == 15) begin
+                                pio_init <= pio_init;
+                                idx <= idx + 6'd1;
+                            end
+                            else if (idx > 15 && idx < 30) begin
+                                pio_init <= pio_init - 18'b0_00000010000000000;
+                                idx <= idx + 6'd1;
+                            end
+
                             write_prev_address <= write_prev_address + 19'd1;
                             write_curr_address <= write_curr_address + 19'd1;
 
@@ -227,17 +246,17 @@ generate
                             write_curr_en <= 1'b1;
 
                             if (i <= 15) begin
-                                write_prev_data <= pio_init - (18'd15 - i);
-                                write_curr_data <= pio_init - (18'd15 - i);
+                                write_prev_data <= pio_init - ((18'd15 - i)<<11); // multiply by our step size (18'b0_00000010000000000)
+                                write_curr_data <= pio_init - ((18'd15 - i)<<11);
                             end
                             else if (i > 15) begin
-                                write_prev_data <= pio_init - (i - 18'd15);
-                                write_curr_data <= pio_init - (i - 18'd15);
+                                write_prev_data <= pio_init - ((i - 18'd15)<<11);
+                                write_curr_data <= pio_init - ((i - 18'd15)<<11);
                             end
                             
 
                             pio_init_done <= 1'b1; 
-                            state <= 5'd1;
+                            state <= 5'd0;
                         end
                         
                     end
