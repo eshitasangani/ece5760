@@ -43,11 +43,11 @@ typedef signed int fix17 ;
 // the light weight buss base
 void *h2p_lw_virtual_base;
 
-// pixel buffer
+// // pixel buffer
 volatile unsigned int * vga_pixel_ptr = NULL ;
 void *vga_pixel_virtual_base;
 
-// character buffer
+// // character buffer
 volatile unsigned int * vga_char_ptr = NULL ;
 void *vga_char_virtual_base;
 
@@ -55,10 +55,12 @@ void *vga_char_virtual_base;
 int fd;
 
 //// BASE ADDRESSES FOR PIO ADDRESSES ////
-#define PIO_INIT_BASE        0x00000000 
-#define PIO_INIT_DONE_BASE   0x00000010 
+#define PIO_INIT_BASE       0x00000000 
+#define PIO_INIT_DONE_BASE  0x00000010 
 #define PIO_INIT_VAL_BASE   0x00000020 
-#define PIO_RESET_BASE   	0x00000030 
+#define PIO_RESET_BASE   	0x00000030
+#define PIO_NUM_ROWS_BASE   0x00000040
+
 
 
 
@@ -107,73 +109,89 @@ int main(void)
 	}
     
     // Get the address that maps to the FPGA pixel buffer
-	vga_pixel_ptr =(unsigned int *)(vga_pixel_virtual_base);
+	//vga_pixel_ptr =(unsigned int *)(vga_pixel_virtual_base);
 
     //// PIO ADDRESSES INITIALIZATION //// 
-    volatile unsigned int *pio_init_addr = NULL;
-    volatile unsigned int *pio_init_done_addr = NULL;
-	volatile unsigned int *pio_init_val_addr = NULL;
-	volatile unsigned int *pio_reset_addr = NULL;
+    volatile unsigned int *pio_init_addr 		= NULL;
+    volatile unsigned int *pio_init_done_addr 	= NULL;
+	volatile unsigned int *pio_init_val_addr 	= NULL;
+	volatile unsigned int *pio_reset_addr 		= NULL;
+	volatile unsigned int *pio_num_rows_addr 	= NULL;
 
-    pio_init_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_BASE );
-    pio_init_done_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_DONE_BASE );
-	pio_init_val_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_VAL_BASE );
-	pio_reset_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_BASE );
+    pio_init_addr   	= (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_BASE );
+    pio_init_done_addr 	= (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_DONE_BASE );
+	pio_init_val_addr 	= (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_VAL_BASE );
+	pio_reset_addr 		= (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_BASE );
+	pio_num_rows_addr 	= (unsigned int *)(h2p_lw_virtual_base +  PIO_NUM_ROWS_BASE );
 
     // inital values to the fpga
-    *pio_init_addr = int2fix28(0);
-	*pio_init_val_addr = 0;
+    //*pio_init_addr = int2fix28(0);
+	//*pio_init_val_addr = 0;
+	*pio_num_rows_addr = 50;
 	int idx = 0;
 
 	fix17 pio_init = 0;
+	int temp_rows = 60;
 
-    while (1) { 
+	while (1) {
+		printf("Enter number of rows: ");
+		scanf("%d", &temp_rows);
+		*pio_num_rows_addr = temp_rows;
 
-        // if (*pio_init_done_addr) { 
-		// if (idx < 30) {
-		// 	printf("%d", idx);
-		// }
+		*pio_reset_addr = 1;
+		*pio_reset_addr = 0;
+		*pio_reset_addr = 1;
+
+
+	}
+
+    // while (1) { 
+
+    //     // if (*pio_init_done_addr) { 
+	// 	// if (idx < 30) {
+	// 	// 	printf("%d", idx);
+	// 	// }
 		
-		if (*pio_reset_addr){
-			*pio_init_addr = int2fix28(0);
-			idx = 0;
-		}
+	// 	if (*pio_reset_addr){
+	// 		*pio_init_addr = int2fix28(0);
+	// 		idx = 0;
+	// 	}
 
-		if (idx <= 14) { 
-			pio_init += float2fix17(0.0078125);
-			*pio_init_addr = pio_init;
-			*pio_init_val_addr = 1;
-			idx += 1; 
-			*pio_init_val_addr = 0;
-		}
+	// 	if (idx <= 14) { 
+	// 		pio_init += float2fix17(0.0078125);
+	// 		*pio_init_addr = pio_init;
+	// 		*pio_init_val_addr = 1;
+	// 		idx += 1; 
+	// 		*pio_init_val_addr = 0;
+	// 	}
 
-		if (idx == 15) { 
-			*pio_init_addr = pio_init;
-			*pio_init_val_addr = 1;
-			idx += 1; 
-			*pio_init_val_addr = 0;
-		}
+	// 	if (idx == 15) { 
+	// 		*pio_init_addr = pio_init;
+	// 		*pio_init_val_addr = 1;
+	// 		idx += 1; 
+	// 		*pio_init_val_addr = 0;
+	// 	}
 
-		if (idx > 15 && idx < 30) {
-			pio_init -= float2fix17(0.0078125);
-			*pio_init_addr = pio_init;
-			*pio_init_val_addr = 1;
-			idx += 1;
-			*pio_init_val_addr = 0;
-		}
+	// 	if (idx > 15 && idx < 30) {
+	// 		pio_init -= float2fix17(0.0078125);
+	// 		*pio_init_addr = pio_init;
+	// 		*pio_init_val_addr = 1;
+	// 		idx += 1;
+	// 		*pio_init_val_addr = 0;
+	// 	}
 
-		// if (16 <= idx < 30) {
-		// 	pio_init -= float2fix17(0.0078125);
-		// 	*pio_init_addr = pio_init;
-		// 	// *pio_init_val_addr = 1;
-		// 	idx += 1;
-		// 	// *pio_init_val_addr = 0;
-		// }
-		printf("%d", idx);
+	// 	// if (16 <= idx < 30) {
+	// 	// 	pio_init -= float2fix17(0.0078125);
+	// 	// 	*pio_init_addr = pio_init;
+	// 	// 	// *pio_init_val_addr = 1;
+	// 	// 	idx += 1;
+	// 	// 	// *pio_init_val_addr = 0;
+	// 	// }
+	// 	// printf("%d", idx);
 
-        // }
+    //     // }
 		
 
-    }
+    // }
 
 } 

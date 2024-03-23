@@ -388,15 +388,16 @@ wire        pio_init_val;
 reg audio_request; 
 reg audio_request_ack [29:0]; // we only use the [15], but use an array so we can reset in the generate block 
 
-
+// pio port for number of rows
+wire [18:0] num_rows;
 
 // BOTTOM IDX = 0
 // TOP IDX = 29 (N-1)
 
 // register this and update every iteration
 // this has to be outside our generate so we can connect between columns
-reg [17:0] u_curr [29:0];
-reg [17:0] u_center [29:0];
+reg [17:0] u_curr [49:0];
+reg [17:0] u_center [49:0];
 
 
 //=======================================================
@@ -413,8 +414,8 @@ assign max_rho = 18'b0_01111110000000000;
 
 signed_mult nonlinear_rho (
         .out (rho_gtension),
-        .a   (u_center[15]>>>4),
-        .b   (u_center[15]>>>4)
+        .a   (u_center[25]>>>4),
+        .b   (u_center[25]>>>4)
     );
 
 //=======================================================
@@ -446,7 +447,7 @@ end
 
 generate
     genvar i;
-    for ( i = 0; i < 30; i = i + 1 ) begin: gen1
+    for ( i = 0; i < 40; i = i + 1 ) begin: gen1
 
         // from m10k blocks
         wire [17:0] u_top ;
@@ -475,7 +476,7 @@ generate
 
 		reg [18:0] addr_idx; 
 
-        M10K_1000_8 M10k_u_prev ( 
+        M10K_1000_8 #(100) M10k_u_prev ( 
             .q             (u_prev), // we always read out u_prev from this m10k
             .d             (write_prev_data), 
             .write_address (write_prev_address),
@@ -484,7 +485,7 @@ generate
             .clk           (CLOCK_50)
         );
 
-        M10K_1000_8 M10k_u_curr ( 
+        M10K_1000_8 #(100) M10k_u_curr ( 
             .q             (u_top),  // we always read out u_top from this m10k
             .d             (write_curr_data), // we always write u_next to this m10k
             .write_address (write_curr_address),
@@ -498,7 +499,7 @@ generate
                     .u_top        ((top_flag) ? (18'd0) : u_top), // if we're at the top, 0 boundary condition
                     .u_bottom     (u_bottom), // if we're at the bottom, 0 boundary condition (set in state machine reset)
                     .u_left       ((i == 0) ? (18'd0) : u_curr[i-1]),
-                    .u_right      ((i == 29) ? (18'd0) : u_curr[i+1]),
+                    .u_right      ((i == 49) ? (18'd0) : u_curr[i+1]),
                     .u_prev       (u_prev),
                     .u_curr       (u_curr[i]),
                     .u_next       (u_next)
@@ -536,7 +537,7 @@ generate
                 case (state)
                     // FIRST TWO STATES ARE OUR INIT STATE MACHINE // 
                     5'd0: begin // start writing initial values
-                        if (addr_idx >= 19'd29) begin // once we are done writing all rows start processing
+                        if (addr_idx >= (num_rows - 19'd1)) begin // once we are done writing all rows start processing
                             addr_idx <= 19'd0;
                             write_prev_address <= 19'd0;
                             write_curr_address <= 19'd0;
@@ -549,18 +550,18 @@ generate
                         write_curr_en <= 1'b1;
                         write_prev_en <= 1'b1;
 						
-                        if ( i <= 19'd15 ) begin
+                        if ( i <= (num_rows>>>1) ) begin
                             if (addr_idx < i) begin
                                 write_prev_data <= write_prev_data + 18'b0_00000000100000000;
                                 write_curr_data <= write_curr_data + 18'b0_00000000100000000;
                             end
-                            else if ((19'd29 - addr_idx) <= i) begin
+                            else if ((19'd39 - addr_idx) <= i) begin
                                 write_prev_data <= write_prev_data - 18'b0_00000000100000000;
                                 write_curr_data <= write_curr_data - 18'b0_00000000100000000;
                             end
                         end
-                        else if (i > 19'd15) begin
-                            if (i <= (19'd29 - addr_idx)) begin
+                        else if (i > (num_rows>>>1)) begin
+                            if (i <= (num_rows - 19'd1 - addr_idx)) begin
                                 write_prev_data <= write_prev_data + 18'b0_00000000100000000;
                                 write_curr_data <= write_curr_data + 18'b0_00000000100000000;
                             end
@@ -618,7 +619,7 @@ generate
                         u_curr[i]       <= u_top;  
                         u_bottom        <= u_curr[i]; 
 
-						if (read_prev_address == 19'd15) begin
+						if (read_prev_address == (num_rows>>>1)) begin // 20 is based on number of rows/2 --> needs to be based on pio
 							u_center[i] <= u_curr[i];
 						end
 
@@ -665,7 +666,7 @@ generate
 							addr_idx <= addr_idx + 19'd1;
 									//  idx[i] <= idx[i] + 18'd1;
 
-                            if (read_prev_address == 19'd28) begin
+                            if (read_prev_address == (num_rows - 19'd2)) begin // based on the number of rows
                                 top_flag <= 1'b1;
                                 read_curr_address <= 19'd0;
                             end
@@ -776,7 +777,7 @@ always @(posedge CLOCK_50) begin //CLOCK_50
 		// then Fout=48000/(2^32)*(2^25) = 375 Hz
 		// dds_accum <= dds_accum + {SW[9:0], 16'b0} ;
 		// convert 16-bit table to 32-bit format
-		bus_write_data <= (u_center[15] << 14) ;
+		bus_write_data <= (u_center[25] << 14) ;
 		bus_addr <= audio_left_address ;
 		bus_byte_enable <= 4'b1111;
 		bus_write <= 1'b1 ;
@@ -797,7 +798,7 @@ always @(posedge CLOCK_50) begin //CLOCK_50
 	// -- now the right channel
 	if (state==4'd4) begin // 
 		state <= 4'd5;	
-		bus_write_data <= (u_center[15] << 14) ;
+		bus_write_data <= (u_center[25] << 14) ;
 		bus_addr <= audio_right_address ;
 		bus_write <= 1'b1 ;
 		audio_request <= 1'b1; // send request to drum for a new value
@@ -963,7 +964,8 @@ Computer_System The_System (
 	.pio_init_val_export             (pio_init_val),
 	.pio_reset_export                (~KEY[0]),
 	.pll_fast_clk_100_outclk0_clk    (pll_fast_clk_100),                    //            pll_fast_clk_100_outclk0.clk
-	.pll_fast_clk_100_locked_export  (pll_fast_clk_100_locked)                   //             pll_fast_clk_100_locked.export
+	.pll_fast_clk_100_locked_export  (pll_fast_clk_100_locked),                   //             pll_fast_clk_100_locked.export
+	.pio_num_rows_export             (num_rows)    
 );
 
 
@@ -1071,14 +1073,14 @@ endmodule
 // http://people.ece.cornell.edu/land/courses/ece5760/DE1_SOC/HDL_style_qts_qii51007.pdf
 //============================================================
 
-module M10K_1000_8( 
+module M10K_1000_8 #(parameter BITWIDTH = 40)( 
     output reg [17:0] q,
     input [17:0] d,
     input [18:0] write_address, read_address,
     input we, clk
 );
 	 // force M10K ram style
-    reg [17:0] mem [29:0]  /* synthesis ramstyle = "no_rw_check, M10K" */;
+    reg [17:0] mem [BITWIDTH - 1:0]  /* synthesis ramstyle = "no_rw_check, M10K" */;
 	// reg [7:0] mem [153600:0]; // 2 solvers
 	// reg [7:0] mem [76800:0]; // 4 solvers
     always @ (posedge clk) begin
