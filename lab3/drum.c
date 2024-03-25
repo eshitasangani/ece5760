@@ -55,11 +55,13 @@ void *vga_char_virtual_base;
 int fd;
 
 //// BASE ADDRESSES FOR PIO ADDRESSES ////
-#define PIO_INIT_BASE       0x00000000 
-#define PIO_INIT_DONE_BASE  0x00000010 
-#define PIO_INIT_VAL_BASE   0x00000020 
-#define PIO_RESET_BASE   	0x00000030
-#define PIO_NUM_ROWS_BASE   0x00000040
+#define PIO_INIT_BASE       	0x00000000 
+#define PIO_INIT_DONE_BASE  	0x00000010 
+#define PIO_INIT_VAL_BASE   	0x00000020 
+#define PIO_RESET_BASE   		0x00000030
+#define PIO_NUM_ROWS_BASE   	0x00000040
+#define PIO_RHO_BASE   			0x00000050
+#define PIO_INITIAL_VALUE_BASE  0x00000060
 
 
 
@@ -112,26 +114,37 @@ int main(void)
 	//vga_pixel_ptr =(unsigned int *)(vga_pixel_virtual_base);
 
     //// PIO ADDRESSES INITIALIZATION //// 
-    volatile unsigned int *pio_init_addr 		= NULL;
-    volatile unsigned int *pio_init_done_addr 	= NULL;
-	volatile unsigned int *pio_init_val_addr 	= NULL;
-	volatile unsigned int *pio_reset_addr 		= NULL;
-	volatile unsigned int *pio_num_rows_addr 	= NULL;
+    volatile unsigned int *pio_init_addr 			= NULL;
+    volatile unsigned int *pio_init_done_addr 		= NULL;
+	volatile unsigned int *pio_init_val_addr 		= NULL;
+	volatile unsigned int *pio_reset_addr 			= NULL;
+	volatile unsigned int *pio_num_rows_addr 		= NULL;
+	volatile unsigned int *pio_rho_addr 			= NULL;
+	volatile unsigned int *pio_initial_value_addr 	= NULL;
 
-    pio_init_addr   	= (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_BASE );
-    pio_init_done_addr 	= (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_DONE_BASE );
-	pio_init_val_addr 	= (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_VAL_BASE );
-	pio_reset_addr 		= (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_BASE );
-	pio_num_rows_addr 	= (unsigned int *)(h2p_lw_virtual_base +  PIO_NUM_ROWS_BASE );
+    pio_init_addr   			= (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_BASE );
+    pio_init_done_addr 			= (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_DONE_BASE );
+	pio_init_val_addr 			= (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_VAL_BASE );
+	pio_reset_addr 				= (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_BASE );
+	pio_num_rows_addr 			= (unsigned int *)(h2p_lw_virtual_base +  PIO_NUM_ROWS_BASE );
+	pio_rho_addr 				= (unsigned int *)(h2p_lw_virtual_base +  PIO_RHO_BASE );
+	pio_initial_value_addr 		= (unsigned int *)(h2p_lw_virtual_base +  PIO_INITIAL_VALUE_BASE );
+
 
     // inital values to the fpga
     //*pio_init_addr = int2fix28(0);
 	//*pio_init_val_addr = 0;
-	*pio_num_rows_addr = 50;
+	*pio_num_rows_addr 		= 450
+	;
+	*pio_rho_addr			= float2fix17(0.125);
+	*pio_initial_value_addr	= float2fix17(0.0625);
 	int idx = 0;
+	int set = 0;
 
-	fix17 pio_init = 0;
-	int temp_rows = 60;
+	fix17 pio_init 	= 0;
+	int temp_rows 	= 150;
+	float temp_init = 0.0625;
+	float temp_rho 	= 0.25;
 
 	while (1) {
 		printf("Enter number of rows: ");
@@ -142,8 +155,58 @@ int main(void)
 		*pio_reset_addr = 0;
 		*pio_reset_addr = 1;
 
-
 	}
+
+	// I DONT REALLY GET IT BUT SOMETIMES IT BREAKS YOUR EARDRUMS GOODLUCK ESHITA
+
+	// while (1) {
+	// 	printf("0: number of rows; 1: change initial value; 2: change rho \n");
+    // 	scanf("%i", &set);
+
+	// 	switch ( set ) {
+
+	// 		case 0:
+
+	// 			printf("Enter number of rows: ");
+	// 			scanf("%d", &temp_rows);
+	// 			*pio_num_rows_addr = temp_rows;
+
+	// 			*pio_reset_addr = 1;
+	// 			*pio_reset_addr = 0;
+	// 			*pio_reset_addr = 1;
+
+	// 		break;
+
+	// 		case 1:
+
+	// 			printf("Enter initial value: ");
+	// 			scanf("%f", &temp_init);
+
+	// 			*pio_initial_value_addr = float2fix17(temp_init);
+
+	// 			*pio_reset_addr = 1;
+	// 			*pio_reset_addr = 0;
+	// 			*pio_reset_addr = 1;
+
+	// 		break;
+
+	// 		case 2:
+
+	// 			printf("Enter rho value: ");
+	// 			scanf("%f", &temp_rho);
+
+	// 			*pio_rho_addr = float2fix17(temp_rho);
+
+	// 			*pio_reset_addr = 1;
+	// 			*pio_reset_addr = 0;
+	// 			*pio_reset_addr = 1;
+
+	// 		break;
+
+	// 	}
+
+
+	// }
 
     // while (1) { 
 

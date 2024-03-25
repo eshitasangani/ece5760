@@ -391,13 +391,20 @@ reg audio_request_ack [29:0]; // we only use the [15], but use an array so we ca
 // pio port for number of rows
 wire [18:0] num_rows;
 
+// pio port for changing rho value and initial value
+wire [17:0] pio_rho;
+wire [17:0] pio_initial_value;
+
+//wire 		pio_reset;
+
+
 // BOTTOM IDX = 0
 // TOP IDX = 29 (N-1)
 
 // register this and update every iteration
 // this has to be outside our generate so we can connect between columns
-reg [17:0] u_curr [49:0];
-reg [17:0] u_center [49:0];
+reg [17:0] u_curr [169:0];
+reg [17:0] u_center [169:0];
 
 
 //=======================================================
@@ -414,8 +421,8 @@ assign max_rho = 18'b0_01111110000000000;
 
 signed_mult nonlinear_rho (
         .out (rho_gtension),
-        .a   (u_center[25]>>>4),
-        .b   (u_center[25]>>>4)
+        .a   (u_center[85]>>>4),
+        .b   (u_center[85]>>>4)
     );
 
 //=======================================================
@@ -434,20 +441,27 @@ always @(posedge CLOCK_50) begin
 		// 	u_center <= u_curr[15];
 		// end
 
-		if (max_rho < (rho_0 + rho_gtension)) begin
-        	rho_eff <= rho_0 + rho_gtension;
+		// THIS USED TO BE BACKWARDS BUT SO MANY PPL CHECKED AND THIS IS THE CORRECT WAY
+		// for some reason our rho is not behaving non linearly
+
+		if (max_rho >= (rho_0 + rho_gtension)) begin //CHANGE TO PIO_RHO LATER
+        	//rho_eff <= max_rho;
+			rho_eff <= rho_0 + rho_gtension;
 		end
 		else begin
 			rho_eff <= max_rho;
+			//rho_eff <= pio_rho + rho_gtension;
 		end
 	end
 end
+
+//assign rho_eff = (max_rho < (pio_rho + rho_gtension)) ? max_rho : (pio_rho + rho_gtension);
 
 
 
 generate
     genvar i;
-    for ( i = 0; i < 40; i = i + 1 ) begin: gen1
+    for ( i = 0; i < 170; i = i + 1 ) begin: gen1
 
         // from m10k blocks
         wire [17:0] u_top ;
@@ -476,7 +490,7 @@ generate
 
 		reg [18:0] addr_idx; 
 
-        M10K_1000_8 #(100) M10k_u_prev ( 
+        M10K_1000_8 #(500) M10k_u_prev ( 
             .q             (u_prev), // we always read out u_prev from this m10k
             .d             (write_prev_data), 
             .write_address (write_prev_address),
@@ -485,7 +499,7 @@ generate
             .clk           (CLOCK_50)
         );
 
-        M10K_1000_8 #(100) M10k_u_curr ( 
+        M10K_1000_8 #(500) M10k_u_curr ( 
             .q             (u_top),  // we always read out u_top from this m10k
             .d             (write_curr_data), // we always write u_next to this m10k
             .write_address (write_curr_address),
@@ -499,7 +513,7 @@ generate
                     .u_top        ((top_flag) ? (18'd0) : u_top), // if we're at the top, 0 boundary condition
                     .u_bottom     (u_bottom), // if we're at the bottom, 0 boundary condition (set in state machine reset)
                     .u_left       ((i == 0) ? (18'd0) : u_curr[i-1]),
-                    .u_right      ((i == 49) ? (18'd0) : u_curr[i+1]),
+                    .u_right      ((i == 169) ? (18'd0) : u_curr[i+1]),
                     .u_prev       (u_prev),
                     .u_curr       (u_curr[i]),
                     .u_next       (u_next)
@@ -529,7 +543,9 @@ generate
                 u_bottom <= 18'd0; 
                 
                 // set u_curr
-                u_curr[i] <= 18'b0_00000000000100000;
+                u_curr[i] <= 18'b0_00000000000100000; // change to pio_init_val
+                //u_curr[i] <= pio_initial_value; 
+				
                 top_flag <= 1'b0;
 				// pio_init_done[i] <= 1'b0;
             end
@@ -555,7 +571,7 @@ generate
                                 write_prev_data <= write_prev_data + 18'b0_00000000100000000;
                                 write_curr_data <= write_curr_data + 18'b0_00000000100000000;
                             end
-                            else if ((19'd39 - addr_idx) <= i) begin
+                            else if (((num_rows - 19'd1) - addr_idx) <= i) begin
                                 write_prev_data <= write_prev_data - 18'b0_00000000100000000;
                                 write_curr_data <= write_curr_data - 18'b0_00000000100000000;
                             end
@@ -777,7 +793,7 @@ always @(posedge CLOCK_50) begin //CLOCK_50
 		// then Fout=48000/(2^32)*(2^25) = 375 Hz
 		// dds_accum <= dds_accum + {SW[9:0], 16'b0} ;
 		// convert 16-bit table to 32-bit format
-		bus_write_data <= (u_center[25] << 14) ;
+		bus_write_data <= (u_center[85] << 14) ;
 		bus_addr <= audio_left_address ;
 		bus_byte_enable <= 4'b1111;
 		bus_write <= 1'b1 ;
@@ -798,7 +814,7 @@ always @(posedge CLOCK_50) begin //CLOCK_50
 	// -- now the right channel
 	if (state==4'd4) begin // 
 		state <= 4'd5;	
-		bus_write_data <= (u_center[25] << 14) ;
+		bus_write_data <= (u_center[85] << 14) ;
 		bus_addr <= audio_right_address ;
 		bus_write <= 1'b1 ;
 		audio_request <= 1'b1; // send request to drum for a new value
@@ -965,7 +981,9 @@ Computer_System The_System (
 	.pio_reset_export                (~KEY[0]),
 	.pll_fast_clk_100_outclk0_clk    (pll_fast_clk_100),                    //            pll_fast_clk_100_outclk0.clk
 	.pll_fast_clk_100_locked_export  (pll_fast_clk_100_locked),                   //             pll_fast_clk_100_locked.export
-	.pio_num_rows_export             (num_rows)    
+	.pio_num_rows_export             (num_rows),
+	.pio_rho_export                  (pio_rho),
+	.pio_initial_value_export        (pio_initial_value)
 );
 
 
@@ -1006,8 +1024,9 @@ module drum_syn (
     assign int_dif_top = u_top - u_curr;
 
     assign int_sum = int_dif_left + int_dif_right + int_dif_bottom + int_dif_top;
-    assign int_mid = (rho_mult + (u_curr << 1) - u_prev + (u_prev >>> 10));
+    assign int_mid = (rho_mult + (u_curr <<< 1) - u_prev + (u_prev >>> 10));
     assign u_next = int_mid - (int_mid >>> 10);
+	//assign u_next = int_mid;
 
     signed_mult rho_mult_inst (
         .out (rho_mult),
@@ -1073,7 +1092,7 @@ endmodule
 // http://people.ece.cornell.edu/land/courses/ece5760/DE1_SOC/HDL_style_qts_qii51007.pdf
 //============================================================
 
-module M10K_1000_8 #(parameter BITWIDTH = 40)( 
+module M10K_1000_8 #(parameter BITWIDTH = 400)( 
     output reg [17:0] q,
     input [17:0] d,
     input [18:0] write_address, read_address,
