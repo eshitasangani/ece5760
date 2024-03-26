@@ -62,6 +62,8 @@ int fd;
 #define PIO_NUM_ROWS_BASE   	0x00000040
 #define PIO_RHO_BASE   			0x00000050
 #define PIO_INITIAL_VALUE_BASE  0x00000060
+#define PIO_STEP_X_BASE  		0x00000070
+#define PIO_STEP_Y_BASE  		0x00000080
 
 
 
@@ -121,6 +123,8 @@ int main(void)
 	volatile unsigned int *pio_num_rows_addr 		= NULL;
 	volatile unsigned int *pio_rho_addr 			= NULL;
 	volatile unsigned int *pio_initial_value_addr 	= NULL;
+	volatile unsigned int *pio_step_x_addr 			= NULL;
+	volatile unsigned int *pio_step_y_addr 			= NULL;
 
     pio_init_addr   			= (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_BASE );
     pio_init_done_addr 			= (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_DONE_BASE );
@@ -129,15 +133,19 @@ int main(void)
 	pio_num_rows_addr 			= (unsigned int *)(h2p_lw_virtual_base +  PIO_NUM_ROWS_BASE );
 	pio_rho_addr 				= (unsigned int *)(h2p_lw_virtual_base +  PIO_RHO_BASE );
 	pio_initial_value_addr 		= (unsigned int *)(h2p_lw_virtual_base +  PIO_INITIAL_VALUE_BASE );
+	pio_step_x_addr 			= (unsigned int *)(h2p_lw_virtual_base +  PIO_STEP_X_BASE );
+	pio_step_y_addr 			= (unsigned int *)(h2p_lw_virtual_base +  PIO_STEP_Y_BASE );
+
 
 
     // inital values to the fpga
     //*pio_init_addr = int2fix28(0);
 	//*pio_init_val_addr = 0;
-	*pio_num_rows_addr 		= 450
-	;
+	*pio_num_rows_addr 		= 170;
 	*pio_rho_addr			= float2fix17(0.125);
 	*pio_initial_value_addr	= float2fix17(0.0625);
+	*pio_step_x_addr		= float2fix17(0.15/85);
+	*pio_step_y_addr		= float2fix17(0.15/85);
 	int idx = 0;
 	int set = 0;
 
@@ -145,65 +153,67 @@ int main(void)
 	int temp_rows 	= 150;
 	float temp_init = 0.0625;
 	float temp_rho 	= 0.25;
+	float temp_step = 0.002;
 
-	while (1) {
-		printf("Enter number of rows: ");
-		scanf("%d", &temp_rows);
-		*pio_num_rows_addr = temp_rows;
+	// while (1) {
+	// 	printf("Enter number of rows: ");
+	// 	scanf("%d", &temp_rows);
+	// 	*pio_num_rows_addr = temp_rows;
 
-		*pio_reset_addr = 1;
-		*pio_reset_addr = 0;
-		*pio_reset_addr = 1;
+	// 	*pio_reset_addr = 1;
+	// 	*pio_reset_addr = 0;
+	// 	*pio_reset_addr = 1;
 
-	}
+	// }
 
 	// I DONT REALLY GET IT BUT SOMETIMES IT BREAKS YOUR EARDRUMS GOODLUCK ESHITA
 
-	// while (1) {
-	// 	printf("0: number of rows; 1: change initial value; 2: change rho \n");
-    // 	scanf("%i", &set);
+	while (1) {
+		printf("0: number of rows; 1: change initial value; 2: change rho \n");
+    	scanf("%i", &set);
 
-	// 	switch ( set ) {
+		switch ( set ) {
 
-	// 		case 0:
+			case 0:
 
-	// 			printf("Enter number of rows: ");
-	// 			scanf("%d", &temp_rows);
-	// 			*pio_num_rows_addr = temp_rows;
+				printf("Enter number of rows: ");
+				scanf("%d", &temp_rows);
+				*pio_num_rows_addr = temp_rows;
+				*pio_step_y_addr =float2fix17(0.15/temp_rows/2.0);
 
-	// 			*pio_reset_addr = 1;
-	// 			*pio_reset_addr = 0;
-	// 			*pio_reset_addr = 1;
+				*pio_reset_addr = 1;
+				*pio_reset_addr = 0;
+				*pio_reset_addr = 1;
 
-	// 		break;
+			break;
 
-	// 		case 1:
+			case 1:
 
-	// 			printf("Enter initial value: ");
-	// 			scanf("%f", &temp_init);
+				printf("Enter initial value: ");
+				scanf("%f", &temp_init);
 
-	// 			*pio_initial_value_addr = float2fix17(temp_init);
+				*pio_initial_value_addr = float2fix17(temp_init);
 
-	// 			*pio_reset_addr = 1;
-	// 			*pio_reset_addr = 0;
-	// 			*pio_reset_addr = 1;
+				*pio_reset_addr = 1;
+				*pio_reset_addr = 0;
+				*pio_reset_addr = 1;
 
-	// 		break;
+			break;
 
-	// 		case 2:
+			case 2:
 
-	// 			printf("Enter rho value: ");
-	// 			scanf("%f", &temp_rho);
+				printf("Enter rho value: ");
+				scanf("%f", &temp_rho);
 
-	// 			*pio_rho_addr = float2fix17(temp_rho);
+				*pio_rho_addr = float2fix17(temp_rho);
 
-	// 			*pio_reset_addr = 1;
-	// 			*pio_reset_addr = 0;
-	// 			*pio_reset_addr = 1;
+				*pio_reset_addr = 1;
+				*pio_reset_addr = 0;
+				*pio_reset_addr = 1;
 
-	// 		break;
+			break;
 
-	// 	}
+		}
 
 
 	// }
@@ -255,6 +265,6 @@ int main(void)
     //     // }
 		
 
-    // }
+    }
 
 } 

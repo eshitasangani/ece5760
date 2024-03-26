@@ -394,6 +394,8 @@ wire [18:0] num_rows;
 // pio port for changing rho value and initial value
 wire [17:0] pio_rho;
 wire [17:0] pio_initial_value;
+wire [17:0] pio_step_x;
+wire [17:0] pio_step_y;
 
 //wire 		pio_reset;
 
@@ -432,11 +434,11 @@ signed_mult nonlinear_rho (
 // reg [29:0] idx;
 
 always @(posedge CLOCK_50) begin
-	if (~KEY[0]) begin
-		// rho
-		rho_eff <= 18'b0_01000000000000000;
-	end
-	else begin
+	// if (~KEY[0]) begin
+	// 	// rho
+	// 	rho_eff <= 18'b0_01000000000000000;
+	// end
+	// else begin
 		// if (idx[15] == 19'd15) begin // output the center node!
 		// 	u_center <= u_curr[15];
 		// end
@@ -444,18 +446,18 @@ always @(posedge CLOCK_50) begin
 		// THIS USED TO BE BACKWARDS BUT SO MANY PPL CHECKED AND THIS IS THE CORRECT WAY
 		// for some reason our rho is not behaving non linearly
 
-		if (max_rho >= (rho_0 + rho_gtension)) begin //CHANGE TO PIO_RHO LATER
-        	//rho_eff <= max_rho;
-			rho_eff <= rho_0 + rho_gtension;
-		end
-		else begin
-			rho_eff <= max_rho;
-			//rho_eff <= pio_rho + rho_gtension;
-		end
+	if (max_rho >= (pio_rho + rho_gtension)) begin //CHANGE TO PIO_RHO LATER
+		//rho_eff <= max_rho;
+		rho_eff <= pio_rho + rho_gtension;
 	end
+	else begin
+		rho_eff <= max_rho;
+		//rho_eff <= pio_rho + rho_gtension;
+	end
+	// end
 end
 
-//assign rho_eff = (max_rho < (pio_rho + rho_gtension)) ? max_rho : (pio_rho + rho_gtension);
+//assign rho_eff = (max_rho >= (pio_rho + rho_gtension)) ? pio_rho + rho_gtension : max_rho;
 
 
 
@@ -543,8 +545,9 @@ generate
                 u_bottom <= 18'd0; 
                 
                 // set u_curr
-                u_curr[i] <= 18'b0_00000000000100000; // change to pio_init_val
-                //u_curr[i] <= pio_initial_value; 
+                //u_curr[i] <= 18'b0_00000000000100000; // change to pio_init_val
+                u_curr[i] <= 18'd0;
+				//u_curr[i] <= pio_step_x;
 				
                 top_flag <= 1'b0;
 				// pio_init_done[i] <= 1'b0;
@@ -568,22 +571,30 @@ generate
 						
                         if ( i <= (num_rows>>>1) ) begin
                             if (addr_idx < i) begin
-                                write_prev_data <= write_prev_data + 18'b0_00000000100000000;
-                                write_curr_data <= write_curr_data + 18'b0_00000000100000000;
+                                // write_prev_data <= write_prev_data + 18'b0_00000000100000000;
+                                // write_curr_data <= write_curr_data + 18'b0_00000000100000000;
+								write_prev_data <= write_prev_data + pio_step_y;
+                                write_curr_data <= write_curr_data + pio_step_y;
                             end
                             else if (((num_rows - 19'd1) - addr_idx) <= i) begin
-                                write_prev_data <= write_prev_data - 18'b0_00000000100000000;
-                                write_curr_data <= write_curr_data - 18'b0_00000000100000000;
+                                // write_prev_data <= write_prev_data - 18'b0_00000000100000000;
+                                // write_curr_data <= write_curr_data - 18'b0_00000000100000000;
+								write_prev_data <= write_prev_data - pio_step_y;
+                                write_curr_data <= write_curr_data - pio_step_y;
                             end
                         end
                         else if (i > (num_rows>>>1)) begin
                             if (i <= (num_rows - 19'd1 - addr_idx)) begin
-                                write_prev_data <= write_prev_data + 18'b0_00000000100000000;
-                                write_curr_data <= write_curr_data + 18'b0_00000000100000000;
+                                // write_prev_data <= write_prev_data + 18'b0_00000000100000000;
+                                // write_curr_data <= write_curr_data + 18'b0_00000000100000000;
+								write_prev_data <= write_prev_data + pio_step_y;
+                                write_curr_data <= write_curr_data + pio_step_y;
                             end
                             else if (i < addr_idx) begin
-                                write_prev_data <= write_prev_data - 18'b0_00000000100000000;
-                                write_curr_data <= write_curr_data - 18'b0_00000000100000000;
+                                // write_prev_data <= write_prev_data - 18'b0_00000000100000000;
+                                // write_curr_data <= write_curr_data - 18'b0_00000000100000000;
+								write_prev_data <= write_prev_data - pio_step_y;
+                                write_curr_data <= write_curr_data - pio_step_y;
                             end
                         end
 
@@ -983,8 +994,9 @@ Computer_System The_System (
 	.pll_fast_clk_100_locked_export  (pll_fast_clk_100_locked),                   //             pll_fast_clk_100_locked.export
 	.pio_num_rows_export             (num_rows),
 	.pio_rho_export                  (pio_rho),
-	.pio_initial_value_export        (pio_initial_value)
-);
+	.pio_initial_value_export        (pio_initial_value),
+	.pio_step_x_export               (pio_step_x),                               //                          pio_step_x.export
+	.pio_step_y_export           	 (pio_step_y)
 
 
 endmodule

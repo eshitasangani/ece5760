@@ -125,8 +125,8 @@ reg [5:0] idx; // this tracks where we are in the column
 
 // register this and update every iteration
 // this has to be outside our generate so we can connect between columns
-reg [17:0] u_curr [29:0];
-reg [17:0] u_center [29:0];
+reg [17:0] u_curr [169:0];
+reg [17:0] u_center [169:0];
 
 
 
@@ -145,8 +145,8 @@ assign max_rho = 18'b0_01111110000000000;
 
 signed_mult nonlinear_rho (
         .out (rho_gtension),
-        .a   (u_center[15]>>>4),
-        .b   (u_center[15]>>>4)
+        .a   (u_center[85]>>>4),
+        .b   (u_center[85]>>>4)
     );
 
 //=======================================================
@@ -180,7 +180,7 @@ end
 
 generate
     genvar i;
-    for ( i = 0; i < 30; i = i + 1 ) begin: gen1
+    for ( i = 0; i < 170; i = i + 1 ) begin: gen1
 
         // from m10k blocks
         wire [17:0] u_top ;
@@ -232,7 +232,7 @@ generate
                     .u_top        ((top_flag) ? (18'd0) : u_top), // if we're at the top, 0 boundary condition
                     .u_bottom     (u_bottom), // if we're at the bottom, 0 boundary condition (set in state machine reset)
                     .u_left       ((i == 0) ? (18'd0) : u_curr[i-1]),
-                    .u_right      ((i == 29) ? (18'd0) : u_curr[i+1]),
+                    .u_right      ((i == 169) ? (18'd0) : u_curr[i+1]),
                     .u_prev       (u_prev),
                     .u_curr       (u_curr[i]),
                     .u_next       (u_next)
@@ -270,7 +270,7 @@ generate
                 case (state)
                     // FIRST TWO STATES ARE OUR INIT STATE MACHINE // 
                     5'd0: begin // start writing initial values
-                        if (addr_idx >= 19'd29) begin // once we are done writing all rows start processing
+                        if (addr_idx >= 19'd169) begin // once we are done writing all rows start processing
                             addr_idx <= 19'd0;
                             write_prev_address <= 19'd0;
                             write_curr_address <= 19'd0;
@@ -283,18 +283,18 @@ generate
                         write_curr_en <= 1'b1;
                         write_prev_en <= 1'b1;
 						
-                        if ( i <= 19'd15 ) begin
+                        if ( i <= 19'd85 ) begin
                             if (addr_idx < i) begin
                                 write_prev_data <= write_prev_data + 18'b0_00000000100000000;
                                 write_curr_data <= write_curr_data + 18'b0_00000000100000000;
                             end
-                            else if ((19'd29 - addr_idx) <= i) begin
+                            else if ((19'd169 - addr_idx) <= i) begin
                                 write_prev_data <= write_prev_data - 18'b0_00000000100000000;
                                 write_curr_data <= write_curr_data - 18'b0_00000000100000000;
                             end
                         end
-                        else if (i > 19'd15) begin
-                            if (i <= (19'd29 - addr_idx)) begin
+                        else if (i > 19'd85) begin
+                            if (i <= (19'd169 - addr_idx)) begin
                                 write_prev_data <= write_prev_data + 18'b0_00000000100000000;
                                 write_curr_data <= write_curr_data + 18'b0_00000000100000000;
                             end
@@ -352,7 +352,7 @@ generate
                         u_curr[i]       <= u_top;  
                         u_bottom        <= u_curr[i]; 
 
-						if (read_prev_address == 19'd15) begin
+						if (read_prev_address == 19'd85) begin
 							u_center[i] <= u_curr[i];
 						end
 
@@ -399,7 +399,7 @@ generate
 							addr_idx <= addr_idx + 19'd1;
 									//  idx[i] <= idx[i] + 18'd1;
 
-                            if (read_prev_address == 19'd28) begin
+                            if (read_prev_address == 19'd168) begin
                                 top_flag <= 1'b1;
                                 read_curr_address <= 19'd0;
                             end
@@ -528,7 +528,7 @@ module M10K_1000_8(
     input we, clk
 );
 	 // force M10K ram style
-    reg [17:0] mem [99:0]  /* synthesis ramstyle = "no_rw_check, M10K" */;
+    reg [17:0] mem [169:0]  /* synthesis ramstyle = "no_rw_check, M10K" */;
 	// reg [7:0] mem [153600:0]; // 2 solvers
 	// reg [7:0] mem [76800:0]; // 4 solvers
     always @ (posedge clk) begin
