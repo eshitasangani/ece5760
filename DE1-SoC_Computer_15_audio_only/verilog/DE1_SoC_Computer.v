@@ -390,11 +390,12 @@ reg audio_request_ack [29:0]; // we only use the [15], but use an array so we ca
 
 // pio port for number of rows
 wire [18:0] num_rows;
+wire [18:0] half_num_rows;
+assign half_num_rows = num_rows >>> 1;
 
 // pio port for changing rho value and initial value
 wire [17:0] pio_rho;
 wire [17:0] pio_initial_value;
-wire [17:0] pio_step_x;
 wire [17:0] pio_step_y;
 
 //wire 		pio_reset;
@@ -413,7 +414,7 @@ reg [17:0] u_center [169:0];
 //  NONLINEAR RHO
 //=======================================================
 // nonlinear rho calculation 
-reg  [17:0] rho_eff;
+wire [17:0] rho_eff;
 wire [17:0] rho_0;
 wire [17:0] max_rho;
 wire [17:0] rho_gtension;
@@ -433,33 +434,33 @@ signed_mult nonlinear_rho (
 
 // reg [29:0] idx;
 
-always @(posedge CLOCK_50) begin
-	// if (~KEY[0]) begin
-	// 	// rho
-	// 	rho_eff <= 18'b0_01000000000000000;
-	// end
-	// else begin
-		// if (idx[15] == 19'd15) begin // output the center node!
-		// 	u_center <= u_curr[15];
-		// end
+// always @(posedge CLOCK_50) begin
+// 	// if (~KEY[0]) begin
+// 	// 	// rho
+// 	// 	rho_eff <= 18'b0_01000000000000000;
+// 	// end
+// 	// else begin
+// 		// if (idx[15] == 19'd15) begin // output the center node!
+// 		// 	u_center <= u_curr[15];
+// 		// end
 
-		// THIS USED TO BE BACKWARDS BUT SO MANY PPL CHECKED AND THIS IS THE CORRECT WAY
-		// for some reason our rho is not behaving non linearly
+// 		// THIS USED TO BE BACKWARDS BUT SO MANY PPL CHECKED AND THIS IS THE CORRECT WAY
+// 		// for some reason our rho is not behaving non linearly
 
-	if (max_rho >= (pio_rho + rho_gtension)) begin //CHANGE TO PIO_RHO LATER
-		//rho_eff <= max_rho;
-		rho_eff <= pio_rho + rho_gtension;
-	end
-	else begin
-		rho_eff <= max_rho;
-		//rho_eff <= pio_rho + rho_gtension;
-	end
-	// end
-end
+// 	if (max_rho >= (pio_rho + rho_gtension)) begin //CHANGE TO PIO_RHO LATER
+// 		//rho_eff <= max_rho;
+// 		rho_eff <= pio_rho + rho_gtension;
+// 	end
+// 	else begin
+// 		rho_eff <= max_rho;
+// 		//rho_eff <= pio_rho + rho_gtension;
+// 	end
+// 	// end
+// end
 
-//assign rho_eff = (max_rho >= (pio_rho + rho_gtension)) ? pio_rho + rho_gtension : max_rho;
+assign rho_eff = (max_rho >= (pio_rho + rho_gtension)) ? pio_rho + rho_gtension : max_rho;
 
-
+reg done_done;
 
 generate
     genvar i;
@@ -569,34 +570,106 @@ generate
                         write_curr_en <= 1'b1;
                         write_prev_en <= 1'b1;
 						
-                        if ( i <= (num_rows>>>1) ) begin
-                            if (addr_idx < i) begin
-                                // write_prev_data <= write_prev_data + 18'b0_00000000100000000;
-                                // write_curr_data <= write_curr_data + 18'b0_00000000100000000;
-								write_prev_data <= write_prev_data + pio_step_y;
-                                write_curr_data <= write_curr_data + pio_step_y;
-                            end
-                            else if (((num_rows - 19'd1) - addr_idx) <= i) begin
-                                // write_prev_data <= write_prev_data - 18'b0_00000000100000000;
-                                // write_curr_data <= write_curr_data - 18'b0_00000000100000000;
-								write_prev_data <= write_prev_data - pio_step_y;
-                                write_curr_data <= write_curr_data - pio_step_y;
-                            end
-                        end
-                        else if (i > (num_rows>>>1)) begin
-                            if (i <= (num_rows - 19'd1 - addr_idx)) begin
-                                // write_prev_data <= write_prev_data + 18'b0_00000000100000000;
-                                // write_curr_data <= write_curr_data + 18'b0_00000000100000000;
-								write_prev_data <= write_prev_data + pio_step_y;
-                                write_curr_data <= write_curr_data + pio_step_y;
-                            end
-                            else if (i < addr_idx) begin
-                                // write_prev_data <= write_prev_data - 18'b0_00000000100000000;
-                                // write_curr_data <= write_curr_data - 18'b0_00000000100000000;
-								write_prev_data <= write_prev_data - pio_step_y;
-                                write_curr_data <= write_curr_data - pio_step_y;
-                            end
-                        end
+                        // if ( i <= (num_rows>>>1) ) begin
+                        //     if (addr_idx < i) begin
+                        //         // write_prev_data <= write_prev_data + 18'b0_00000000100000000;
+                        //         // write_curr_data <= write_curr_data + 18'b0_00000000100000000;
+						// 		write_prev_data <= write_prev_data + pio_step_y;
+                        //         write_curr_data <= write_curr_data + pio_step_y;
+                        //     end
+                        //     else if (((num_rows - 19'd1) - addr_idx) <= i) begin
+                        //         // write_prev_data <= write_prev_data - 18'b0_00000000100000000;
+                        //         // write_curr_data <= write_curr_data - 18'b0_00000000100000000;
+						// 		write_prev_data <= write_prev_data - pio_step_y;
+                        //         write_curr_data <= write_curr_data - pio_step_y;
+                        //     end
+                        // end
+                        // else if (i > (num_rows>>>1)) begin
+                        //     if (i <= (num_rows - 19'd1 - addr_idx)) begin
+                        //         // write_prev_data <= write_prev_data + 18'b0_00000000100000000;
+                        //         // write_curr_data <= write_curr_data + 18'b0_00000000100000000;
+						// 		write_prev_data <= write_prev_data + pio_step_y;
+                        //         write_curr_data <= write_curr_data + pio_step_y;
+                        //     end
+                        //     else if (i < addr_idx) begin
+                        //         // write_prev_data <= write_prev_data - 18'b0_00000000100000000;
+                        //         // write_curr_data <= write_curr_data - 18'b0_00000000100000000;
+						// 		write_prev_data <= write_prev_data - pio_step_y;
+                        //         write_curr_data <= write_curr_data - pio_step_y;
+                        //     end
+                        // end
+						if ( i <= 19'd85 ) begin
+							if (addr_idx < half_num_rows) begin
+								// if (i == 19'd0 || addr_idx == 19'd0) begin
+								// 	write_prev_data <= 18'd0;
+                        		// 	write_curr_data <= 18'd0;
+								// end
+								if (i > addr_idx) begin
+									write_prev_data <= write_prev_data + pio_step_y;
+                        			write_curr_data <= write_prev_data + pio_step_y;
+								end
+								else if (i <= addr_idx) begin
+									write_prev_data <= write_prev_data;
+                        			write_curr_data <= write_prev_data;
+								end
+							end
+							else if (addr_idx >= half_num_rows) begin
+								// if (i == 19'd0 || addr_idx == (num_rows - 19'd1)) begin
+								// 	write_prev_data <= 18'd0;
+                        		// 	write_curr_data <= 18'd0;
+								// end
+								if ((i + addr_idx - half_num_rows - 19'd1) < half_num_rows) begin
+									write_prev_data <= write_prev_data;
+                        			write_curr_data <= write_prev_data;
+								end
+								else if ((i + addr_idx - half_num_rows - 19'd1) >= half_num_rows) begin
+									write_prev_data <= write_prev_data - pio_step_y;
+                        			write_curr_data <= write_prev_data - pio_step_y;
+								end
+							end
+							// else begin
+							// 	write_prev_data <= write_prev_data;
+							// 	write_curr_data <= write_prev_data;
+							// end
+
+						end
+						else if (i > 19'd85) begin
+							if (addr_idx < half_num_rows) begin
+								// if (i == 19'd159 || addr_idx == 0) begin
+								// 	write_prev_data <= 18'd0;
+                        		// 	write_curr_data <= 18'd0;
+								// end
+								if ((addr_idx + i - 19'd84) < half_num_rows) begin
+									write_prev_data <= write_prev_data + pio_step_y;
+                        			write_curr_data <= write_prev_data + pio_step_y;
+								end
+								else if ((addr_idx + i - 19'd84) >= half_num_rows) begin
+									write_prev_data <= write_prev_data;
+                        			write_curr_data <= write_prev_data;
+								end
+							end
+							else if (addr_idx >= half_num_rows) begin
+								// if (i == 19'd159 || addr_idx == (num_rows - 19'd1)) begin
+								// 	write_prev_data <= 18'd0;
+                        		// 	write_curr_data <= 18'd0;
+								// end
+								if (i < addr_idx) begin
+									write_prev_data <= write_prev_data;
+                        			write_curr_data <= write_prev_data;
+								end
+								else if (i >= addr_idx) begin
+									write_prev_data <= write_prev_data - pio_step_y;
+                        			write_curr_data <= write_prev_data - pio_step_y;
+								end
+
+							end
+							// else begin
+							// 	write_prev_data <= write_prev_data;
+							// 	write_curr_data <= write_prev_data;
+							// end
+
+						end
+
 
 
                         
@@ -697,6 +770,9 @@ generate
                                 top_flag <= 1'b1;
                                 read_curr_address <= 19'd0;
                             end
+							if ((addr_idx == num_rows - 19'd1) && (i == 19'd169)) begin
+								done_done <= 1'b1;
+							end
 
                             state <= 5'd4;
                         end
@@ -994,10 +1070,10 @@ Computer_System The_System (
 	.pll_fast_clk_100_locked_export  (pll_fast_clk_100_locked),                   //             pll_fast_clk_100_locked.export
 	.pio_num_rows_export             (num_rows),
 	.pio_rho_export                  (pio_rho),
-	.pio_initial_value_export        (pio_initial_value),
-	.pio_step_x_export               (pio_step_x),                               //                          pio_step_x.export
-	.pio_step_y_export           	 (pio_step_y)
-
+	.pio_initial_value_export        (pio_initial_value), // CAN DELETE: NOT USING            
+	.pio_step_y_export           	 (pio_step_y),
+	.pio_done_done_export            (done_done)   
+);
 
 endmodule
 

@@ -128,7 +128,15 @@ reg [5:0] idx; // this tracks where we are in the column
 reg [17:0] u_curr [169:0];
 reg [17:0] u_center [169:0];
 
+wire [17:0] pio_step_x;
+wire [17:0] pio_step_y;
+wire [18:0] num_rows;
 
+assign num_rows = 19'd170;
+assign pio_step_x = 18'b0_00000000011000001;
+assign pio_step_y = 18'b0_00000000011000001;
+wire [18:0] half_num_rows;
+assign half_num_rows = num_rows >>> 1;
 
 
 //=======================================================
@@ -262,7 +270,7 @@ generate
                 u_bottom <= 18'd0; 
                 
                 // set u_curr
-                u_curr[i] <= 18'b0_00000000000100000;
+                u_curr[i] <= 18'b0;
                 top_flag <= 1'b0;
 				// pio_init_done[i] <= 1'b0;
             end
@@ -283,26 +291,98 @@ generate
                         write_curr_en <= 1'b1;
                         write_prev_en <= 1'b1;
 						
-                        if ( i <= 19'd85 ) begin
-                            if (addr_idx < i) begin
-                                write_prev_data <= write_prev_data + 18'b0_00000000100000000;
-                                write_curr_data <= write_curr_data + 18'b0_00000000100000000;
-                            end
-                            else if ((19'd169 - addr_idx) <= i) begin
-                                write_prev_data <= write_prev_data - 18'b0_00000000100000000;
-                                write_curr_data <= write_curr_data - 18'b0_00000000100000000;
-                            end
-                        end
-                        else if (i > 19'd85) begin
-                            if (i <= (19'd169 - addr_idx)) begin
-                                write_prev_data <= write_prev_data + 18'b0_00000000100000000;
-                                write_curr_data <= write_curr_data + 18'b0_00000000100000000;
-                            end
-                            else if (i < addr_idx) begin
-                                write_prev_data <= write_prev_data - 18'b0_00000000100000000;
-                                write_curr_data <= write_curr_data - 18'b0_00000000100000000;
-                            end
-                        end
+                        // if ( i <= 19'd85 ) begin
+                        //     if (addr_idx < i) begin
+                        //         write_prev_data <= write_prev_data + 18'b0_00000000100000000;
+                        //         write_curr_data <= write_curr_data + 18'b0_00000000100000000;
+                        //     end
+                        //     else if ((19'd169 - addr_idx) <= i) begin
+                        //         write_prev_data <= write_prev_data - 18'b0_00000000100000000;
+                        //         write_curr_data <= write_curr_data - 18'b0_00000000100000000;
+                        //     end
+                        // end
+                        // else if (i > 19'd85) begin
+                        //     if (i <= (19'd169 - addr_idx)) begin
+                        //         write_prev_data <= write_prev_data + 18'b0_00000000100000000;
+                        //         write_curr_data <= write_curr_data + 18'b0_00000000100000000;
+                        //     end
+                        //     else if (i < addr_idx) begin
+                        //         write_prev_data <= write_prev_data - 18'b0_00000000100000000;
+                        //         write_curr_data <= write_curr_data - 18'b0_00000000100000000;
+                        //     end
+                        // end
+
+                        if ( i <= 19'd80 ) begin
+							if (addr_idx < half_num_rows) begin
+								// if (i == 19'd0 || addr_idx == 19'd0) begin
+								// 	write_prev_data <= 18'd0;
+                        		// 	write_curr_data <= 18'd0;
+								// end
+								if (i > addr_idx) begin
+									write_prev_data <= write_prev_data + pio_step_y;
+                        			write_curr_data <= write_prev_data + pio_step_y;
+								end
+								else if (i <= addr_idx) begin
+									write_prev_data <= write_prev_data + pio_step_x;
+                        			write_curr_data <= write_prev_data + pio_step_x;
+								end
+							end
+							else if (addr_idx >= half_num_rows) begin
+								// if (i == 19'd0 || addr_idx == (num_rows - 19'd1)) begin
+								// 	write_prev_data <= 18'd0;
+                        		// 	write_curr_data <= 18'd0;
+								// end
+								if ((i + addr_idx - half_num_rows - 19'd1) < half_num_rows) begin
+									write_prev_data <= write_prev_data + pio_step_x;
+                        			write_curr_data <= write_prev_data + pio_step_x;
+								end
+								else if ((i + addr_idx - half_num_rows - 19'd1) >= half_num_rows) begin
+									write_prev_data <= write_prev_data - pio_step_y;
+                        			write_curr_data <= write_prev_data - pio_step_y;
+								end
+							end
+							// else begin
+							// 	write_prev_data <= write_prev_data;
+							// 	write_curr_data <= write_prev_data;
+							// end
+
+						end
+						else if (i > 19'd80) begin
+							if (addr_idx < half_num_rows) begin
+								// if (i == 19'd159 || addr_idx == 0) begin
+								// 	write_prev_data <= 18'd0;
+                        		// 	write_curr_data <= 18'd0;
+								// end
+								if ((addr_idx + i - 19'd79) < half_num_rows) begin
+									write_prev_data <= write_prev_data + pio_step_y;
+                        			write_curr_data <= write_prev_data + pio_step_y;
+								end
+								else if ((addr_idx + i - 19'd79) >= half_num_rows) begin
+									write_prev_data <= write_prev_data - pio_step_x;
+                        			write_curr_data <= write_prev_data - pio_step_x;
+								end
+							end
+							else if (addr_idx >= half_num_rows) begin
+								// if (i == 19'd159 || addr_idx == (num_rows - 19'd1)) begin
+								// 	write_prev_data <= 18'd0;
+                        		// 	write_curr_data <= 18'd0;
+								// end
+								if (i < addr_idx) begin
+									write_prev_data <= write_prev_data - pio_step_x;
+                        			write_curr_data <= write_prev_data - pio_step_x;
+								end
+								else if (i >= addr_idx) begin
+									write_prev_data <= write_prev_data - pio_step_y;
+                        			write_curr_data <= write_prev_data - pio_step_y;
+								end
+
+							end
+							// else begin
+							// 	write_prev_data <= write_prev_data;
+							// 	write_curr_data <= write_prev_data;
+							// end
+
+						end
 
 
                         

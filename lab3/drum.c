@@ -62,7 +62,7 @@ int fd;
 #define PIO_NUM_ROWS_BASE   	0x00000040
 #define PIO_RHO_BASE   			0x00000050
 #define PIO_INITIAL_VALUE_BASE  0x00000060
-#define PIO_STEP_X_BASE  		0x00000070
+#define PIO_DONE_DONE_BASE  	0x00000070
 #define PIO_STEP_Y_BASE  		0x00000080
 
 
@@ -123,7 +123,7 @@ int main(void)
 	volatile unsigned int *pio_num_rows_addr 		= NULL;
 	volatile unsigned int *pio_rho_addr 			= NULL;
 	volatile unsigned int *pio_initial_value_addr 	= NULL;
-	volatile unsigned int *pio_step_x_addr 			= NULL;
+	volatile unsigned int *pio_done_done_addr 		= NULL;
 	volatile unsigned int *pio_step_y_addr 			= NULL;
 
     pio_init_addr   			= (unsigned int *)(h2p_lw_virtual_base +  PIO_INIT_BASE );
@@ -133,7 +133,7 @@ int main(void)
 	pio_num_rows_addr 			= (unsigned int *)(h2p_lw_virtual_base +  PIO_NUM_ROWS_BASE );
 	pio_rho_addr 				= (unsigned int *)(h2p_lw_virtual_base +  PIO_RHO_BASE );
 	pio_initial_value_addr 		= (unsigned int *)(h2p_lw_virtual_base +  PIO_INITIAL_VALUE_BASE );
-	pio_step_x_addr 			= (unsigned int *)(h2p_lw_virtual_base +  PIO_STEP_X_BASE );
+	pio_done_done_addr 			= (unsigned int *)(h2p_lw_virtual_base +  PIO_DONE_DONE_BASE );
 	pio_step_y_addr 			= (unsigned int *)(h2p_lw_virtual_base +  PIO_STEP_Y_BASE );
 
 
@@ -141,11 +141,10 @@ int main(void)
     // inital values to the fpga
     //*pio_init_addr = int2fix28(0);
 	//*pio_init_val_addr = 0;
-	*pio_num_rows_addr 		= 170;
+	*pio_num_rows_addr 		= 160;
 	*pio_rho_addr			= float2fix17(0.125);
 	*pio_initial_value_addr	= float2fix17(0.0625);
-	*pio_step_x_addr		= float2fix17(0.15/85);
-	*pio_step_y_addr		= float2fix17(0.15/85);
+	*pio_step_y_addr		= float2fix17(0.15/80); // 80 is num rows/2 (init to 160 rows)
 	int idx = 0;
 	int set = 0;
 
@@ -168,6 +167,14 @@ int main(void)
 
 	// I DONT REALLY GET IT BUT SOMETIMES IT BREAKS YOUR EARDRUMS GOODLUCK ESHITA
 
+	///////////////////////////////////////////////////////////////
+// scan thread  // 
+///////////////////////////////////////////////////////////////
+// void * scan_thread () { 
+
+
+// }
+
 	while (1) {
 		printf("0: number of rows; 1: change initial value; 2: change rho \n");
     	scanf("%i", &set);
@@ -179,7 +186,7 @@ int main(void)
 				printf("Enter number of rows: ");
 				scanf("%d", &temp_rows);
 				*pio_num_rows_addr = temp_rows;
-				*pio_step_y_addr =float2fix17(0.15/temp_rows/2.0);
+				*pio_step_y_addr =float2fix17(temp_init/temp_rows/2.0);
 
 				*pio_reset_addr = 1;
 				*pio_reset_addr = 0;
@@ -193,6 +200,8 @@ int main(void)
 				scanf("%f", &temp_init);
 
 				*pio_initial_value_addr = float2fix17(temp_init);
+				//*pio_step_x_addr =float2fix17(temp_init/80.0); // 80 is num columns/2
+				*pio_step_y_addr =float2fix17(temp_init/temp_rows/2.0);
 
 				*pio_reset_addr = 1;
 				*pio_reset_addr = 0;
@@ -212,6 +221,17 @@ int main(void)
 				*pio_reset_addr = 1;
 
 			break;
+
+		gettimeofday(&t1, NULL);
+
+		while(!*pio_done_done_addr){}
+
+		gettimeofday(&t2, NULL);
+
+		elapsed_time = (t2.tv_sec - t1.tv_sec) * 1000000.0;      // sec to us
+		elapsed_time += (t2.tv_usec - t1.tv_usec) ;   // us 
+		elapsed_time = elapsed_time * 0.001;
+		printf("\ntime: %.2f ms ", elapsed_time);
 
 		}
 
