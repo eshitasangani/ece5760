@@ -3,7 +3,7 @@
 
 module testbench();
 
-reg clk, slow_clk, reset;
+reg clk, slow_clk, reset, pio_reset;
 reg [31:0] timer;
 
 //Initialize clocks and index
@@ -35,15 +35,6 @@ initial begin
     #41666
     reset  = 1'b0;
 end
-
-// pio ports for initial values 
-// TODO: make sure to set these to wires when we instantiate the pio ports!!
-reg [17:0] pio_init;
-reg        pio_init_done;
-
-
-// this simulates our pio ports
-reg [5:0] idx; // this tracks where we are in the column
 
 // nonlinear rho calculation 
 // reg [17:0] rho_eff;
@@ -143,10 +134,13 @@ assign half_num_rows = num_rows >>> 1;
 //  NONLINEAR RHO
 //=======================================================
 // nonlinear rho calculation 
-reg  [17:0] rho_eff;
+wire  [17:0] rho_eff;
 wire [17:0] rho_0;
 wire [17:0] max_rho;
 wire [17:0] rho_gtension;
+wire [17:0] pio_rho;
+
+assign pio_rho = 18'b0_00100000000000000;
 
 assign rho_0 = 18'b0_01000000000000000;
 assign max_rho = 18'b0_01111110000000000;
@@ -161,30 +155,10 @@ signed_mult nonlinear_rho (
 //  DRUM SYNTH STATE MACHINE
 //=======================================================
 
-// reg [29:0] idx;
+assign rho_eff = (max_rho >= (pio_rho + rho_gtension)) ? pio_rho + rho_gtension : max_rho;
 
-always @(posedge clk) begin
-	if (reset) begin
-		// rho
-		rho_eff <= 18'b0_01000000000000000;
-	end
-	else begin
-		// if (idx[15] == 19'd15) begin // output the center node!
-		// 	u_center <= u_curr[15];
-		// end
-
-		if (max_rho >= (rho_0 + rho_gtension)) begin
-        	rho_eff <= rho_0 + rho_gtension;
-            //rho_eff <= max_rho;
-		end
-		else begin
-			rho_eff <= max_rho;
-            //rho_eff <= rho_0 + rho_gtension;
-		end
-	end
-end
-
-
+// reg done_done;
+reg done_done [169:0];
 
 generate
     genvar i;
@@ -223,7 +197,7 @@ generate
             .write_address (write_prev_address),
             .read_address  (read_prev_address),
             .we            (write_prev_en),
-            .clk           (clk)
+            .clk           (CLOCK_50)
         );
 
         M10K_1000_8 M10k_u_curr ( 
@@ -232,7 +206,7 @@ generate
             .write_address (write_curr_address),
             .read_address  (read_curr_address),
             .we            (write_curr_en),
-            .clk           (clk)
+            .clk           (CLOCK_50)
         );
 
         drum_syn drum_syn_inst (
@@ -246,10 +220,10 @@ generate
                     .u_next       (u_next)
         ); 
 
-        always @(posedge clk) begin
+        always @(posedge CLOCK_50) begin
 			// audio_request_ack[i] <= audio_request;
 
-            if (reset) begin
+            if (reset || pio_reset) begin
                 state <= 5'd0;
                 write_prev_address <= 19'd0;
                 write_curr_address <= 19'd0;
@@ -270,15 +244,19 @@ generate
                 u_bottom <= 18'd0; 
                 
                 // set u_curr
-                u_curr[i] <= 18'b0;
+                //u_curr[i] <= 18'b0_00000000000100000; // change to pio_init_val
+                u_curr[i] <= 18'd0;
+				//u_curr[i] <= pio_step_x;
+				
                 top_flag <= 1'b0;
-				// pio_init_done[i] <= 1'b0;
+				done_done[i] <= 1'b0;
+
             end
             else begin
                 case (state)
                     // FIRST TWO STATES ARE OUR INIT STATE MACHINE // 
                     5'd0: begin // start writing initial values
-                        if (addr_idx >= 19'd169) begin // once we are done writing all rows start processing
+                        if (addr_idx >= (num_rows - 19'd1)) begin // once we are done writing all rows start processing
                             addr_idx <= 19'd0;
                             write_prev_address <= 19'd0;
                             write_curr_address <= 19'd0;
@@ -291,28 +269,35 @@ generate
                         write_curr_en <= 1'b1;
                         write_prev_en <= 1'b1;
 						
-                        // if ( i <= 19'd85 ) begin
+                        // if ( i <= (num_rows>>>1) ) begin
                         //     if (addr_idx < i) begin
-                        //         write_prev_data <= write_prev_data + 18'b0_00000000100000000;
-                        //         write_curr_data <= write_curr_data + 18'b0_00000000100000000;
+                        //         // write_prev_data <= write_prev_data + 18'b0_00000000100000000;
+                        //         // write_curr_data <= write_curr_data + 18'b0_00000000100000000;
+						// 		write_prev_data <= write_prev_data + pio_step_y;
+                        //         write_curr_data <= write_curr_data + pio_step_y;
                         //     end
-                        //     else if ((19'd169 - addr_idx) <= i) begin
-                        //         write_prev_data <= write_prev_data - 18'b0_00000000100000000;
-                        //         write_curr_data <= write_curr_data - 18'b0_00000000100000000;
+                        //     else if (((num_rows - 19'd1) - addr_idx) <= i) begin
+                        //         // write_prev_data <= write_prev_data - 18'b0_00000000100000000;
+                        //         // write_curr_data <= write_curr_data - 18'b0_00000000100000000;
+						// 		write_prev_data <= write_prev_data - pio_step_y;
+                        //         write_curr_data <= write_curr_data - pio_step_y;
                         //     end
                         // end
-                        // else if (i > 19'd85) begin
-                        //     if (i <= (19'd169 - addr_idx)) begin
-                        //         write_prev_data <= write_prev_data + 18'b0_00000000100000000;
-                        //         write_curr_data <= write_curr_data + 18'b0_00000000100000000;
+                        // else if (i > (num_rows>>>1)) begin
+                        //     if (i <= (num_rows - 19'd1 - addr_idx)) begin
+                        //         // write_prev_data <= write_prev_data + 18'b0_00000000100000000;
+                        //         // write_curr_data <= write_curr_data + 18'b0_00000000100000000;
+						// 		write_prev_data <= write_prev_data + pio_step_y;
+                        //         write_curr_data <= write_curr_data + pio_step_y;
                         //     end
                         //     else if (i < addr_idx) begin
-                        //         write_prev_data <= write_prev_data - 18'b0_00000000100000000;
-                        //         write_curr_data <= write_curr_data - 18'b0_00000000100000000;
+                        //         // write_prev_data <= write_prev_data - 18'b0_00000000100000000;
+                        //         // write_curr_data <= write_curr_data - 18'b0_00000000100000000;
+						// 		write_prev_data <= write_prev_data - pio_step_y;
+                        //         write_curr_data <= write_curr_data - pio_step_y;
                         //     end
                         // end
-
-                        if ( i <= 19'd80 ) begin
+						if ( i <= 19'd85 ) begin
 							if (addr_idx < half_num_rows) begin
 								// if (i == 19'd0 || addr_idx == 19'd0) begin
 								// 	write_prev_data <= 18'd0;
@@ -323,8 +308,8 @@ generate
                         			write_curr_data <= write_prev_data + pio_step_y;
 								end
 								else if (i <= addr_idx) begin
-									write_prev_data <= write_prev_data + pio_step_x;
-                        			write_curr_data <= write_prev_data + pio_step_x;
+									write_prev_data <= write_prev_data;
+                        			write_curr_data <= write_prev_data;
 								end
 							end
 							else if (addr_idx >= half_num_rows) begin
@@ -333,8 +318,8 @@ generate
                         		// 	write_curr_data <= 18'd0;
 								// end
 								if ((i + addr_idx - half_num_rows - 19'd1) < half_num_rows) begin
-									write_prev_data <= write_prev_data + pio_step_x;
-                        			write_curr_data <= write_prev_data + pio_step_x;
+									write_prev_data <= write_prev_data;
+                        			write_curr_data <= write_prev_data;
 								end
 								else if ((i + addr_idx - half_num_rows - 19'd1) >= half_num_rows) begin
 									write_prev_data <= write_prev_data - pio_step_y;
@@ -347,19 +332,19 @@ generate
 							// end
 
 						end
-						else if (i > 19'd80) begin
+						else if (i > 19'd85) begin
 							if (addr_idx < half_num_rows) begin
 								// if (i == 19'd159 || addr_idx == 0) begin
 								// 	write_prev_data <= 18'd0;
                         		// 	write_curr_data <= 18'd0;
 								// end
-								if ((addr_idx + i - 19'd79) < half_num_rows) begin
+								if ((addr_idx + i - 19'd84) < half_num_rows) begin
 									write_prev_data <= write_prev_data + pio_step_y;
                         			write_curr_data <= write_prev_data + pio_step_y;
 								end
-								else if ((addr_idx + i - 19'd79) >= half_num_rows) begin
-									write_prev_data <= write_prev_data - pio_step_x;
-                        			write_curr_data <= write_prev_data - pio_step_x;
+								else if ((addr_idx + i - 19'd84) >= half_num_rows) begin
+									write_prev_data <= write_prev_data;
+                        			write_curr_data <= write_prev_data;
 								end
 							end
 							else if (addr_idx >= half_num_rows) begin
@@ -368,8 +353,8 @@ generate
                         		// 	write_curr_data <= 18'd0;
 								// end
 								if (i < addr_idx) begin
-									write_prev_data <= write_prev_data - pio_step_x;
-                        			write_curr_data <= write_prev_data - pio_step_x;
+									write_prev_data <= write_prev_data;
+                        			write_curr_data <= write_prev_data;
 								end
 								else if (i >= addr_idx) begin
 									write_prev_data <= write_prev_data - pio_step_y;
@@ -383,8 +368,6 @@ generate
 							// end
 
 						end
-
-
                         
                             addr_idx <= addr_idx + 19'd1;
 							write_prev_address <= write_prev_address + 19'd1;
@@ -432,7 +415,7 @@ generate
                         u_curr[i]       <= u_top;  
                         u_bottom        <= u_curr[i]; 
 
-						if (read_prev_address == 19'd85) begin
+						if (read_prev_address == (num_rows>>>1)) begin // 20 is based on number of rows/2 --> needs to be based on pio
 							u_center[i] <= u_curr[i];
 						end
 
@@ -445,6 +428,7 @@ generate
                         
                         // state transition 
                         if (top_flag) begin // we've finished the column
+							done_done[i] <= 1'b1;
 							if (audio_request) begin // wait for audio bus master state machine to send a request for a new iteration 
 
 								// restart from the bottom!
@@ -462,6 +446,7 @@ generate
 								addr_idx <= 19'd0;
 
 								state <= 5'd3;
+
 							end
 							else begin
 								state <= 5'd6;
@@ -479,7 +464,7 @@ generate
 							addr_idx <= addr_idx + 19'd1;
 									//  idx[i] <= idx[i] + 18'd1;
 
-                            if (read_prev_address == 19'd168) begin
+                            if (read_prev_address == (num_rows - 19'd2)) begin // based on the number of rows
                                 top_flag <= 1'b1;
                                 read_curr_address <= 19'd0;
                             end
@@ -495,6 +480,7 @@ generate
         end
     end
 endgenerate
+
 
 endmodule
 

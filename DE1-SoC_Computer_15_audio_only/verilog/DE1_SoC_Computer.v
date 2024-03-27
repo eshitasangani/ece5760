@@ -380,11 +380,6 @@ assign HEX0 = 7'b1111111;
 wire 					pll_fast_clk_100 ;
 wire 					pll_fast_clk_100_locked ;
 
-// pio ports for initial values 
-// TODO: make sure to set these to wires when we instantiate the pio ports!!
-wire [31:0] pio_init;
-reg  [29:0] pio_init_done;
-wire        pio_init_val;
 reg audio_request; 
 reg audio_request_ack [29:0]; // we only use the [15], but use an array so we can reset in the generate block 
 
@@ -393,12 +388,12 @@ wire [18:0] num_rows;
 wire [18:0] half_num_rows;
 assign half_num_rows = num_rows >>> 1;
 
-// pio port for changing rho value and initial value
+// pio port for changing rho value and initial values
 wire [17:0] pio_rho;
-wire [17:0] pio_initial_value;
 wire [17:0] pio_step_y;
 
-//wire 		pio_reset;
+wire 		pio_reset;
+wire [31:0] pio_damping;
 
 
 // BOTTOM IDX = 0
@@ -432,35 +427,16 @@ signed_mult nonlinear_rho (
 //  DRUM SYNTH STATE MACHINE
 //=======================================================
 
-// reg [29:0] idx;
-
-// always @(posedge CLOCK_50) begin
-// 	// if (~KEY[0]) begin
-// 	// 	// rho
-// 	// 	rho_eff <= 18'b0_01000000000000000;
-// 	// end
-// 	// else begin
-// 		// if (idx[15] == 19'd15) begin // output the center node!
-// 		// 	u_center <= u_curr[15];
-// 		// end
-
-// 		// THIS USED TO BE BACKWARDS BUT SO MANY PPL CHECKED AND THIS IS THE CORRECT WAY
-// 		// for some reason our rho is not behaving non linearly
-
-// 	if (max_rho >= (pio_rho + rho_gtension)) begin //CHANGE TO PIO_RHO LATER
-// 		//rho_eff <= max_rho;
-// 		rho_eff <= pio_rho + rho_gtension;
-// 	end
-// 	else begin
-// 		rho_eff <= max_rho;
-// 		//rho_eff <= pio_rho + rho_gtension;
-// 	end
-// 	// end
-// end
-
 assign rho_eff = (max_rho >= (pio_rho + rho_gtension)) ? pio_rho + rho_gtension : max_rho;
 
-reg done_done;
+// reg [31:0] counter;
+// always @(posedge CLOCK_50) begin
+// 	if (~KEY[0]) begin
+// 		counter <= 31'd0;
+// 	end 
+// 	else begin
+
+reg [169:0] done_done;
 
 generate
     genvar i;
@@ -513,6 +489,7 @@ generate
 
         drum_syn drum_syn_inst (
                     .rho          (rho_eff), // 0.0625 = 18'b0_00010000000000000
+					.damping      (pio_damping),
                     .u_top        ((top_flag) ? (18'd0) : u_top), // if we're at the top, 0 boundary condition
                     .u_bottom     (u_bottom), // if we're at the bottom, 0 boundary condition (set in state machine reset)
                     .u_left       ((i == 0) ? (18'd0) : u_curr[i-1]),
@@ -525,7 +502,7 @@ generate
         always @(posedge CLOCK_50) begin
 			// audio_request_ack[i] <= audio_request;
 
-            if (~KEY[0]) begin
+            if (~KEY[0] || pio_reset) begin
                 state <= 5'd0;
                 write_prev_address <= 19'd0;
                 write_curr_address <= 19'd0;
@@ -551,7 +528,8 @@ generate
 				//u_curr[i] <= pio_step_x;
 				
                 top_flag <= 1'b0;
-				// pio_init_done[i] <= 1'b0;
+				
+
             end
             else begin
                 case (state)
@@ -565,6 +543,7 @@ generate
                             write_prev_en   <= 1'b0;
                             // u_curr[i] <= u_top;
                             state <= 5'd2;
+							done_done[i] <= 1'b0;
                         end
                         else begin
                         write_curr_en <= 1'b1;
@@ -669,9 +648,6 @@ generate
 							// end
 
 						end
-
-
-
                         
                             addr_idx <= addr_idx + 19'd1;
 							write_prev_address <= write_prev_address + 19'd1;
@@ -719,7 +695,7 @@ generate
                         u_curr[i]       <= u_top;  
                         u_bottom        <= u_curr[i]; 
 
-						if (read_prev_address == (num_rows>>>1)) begin // 20 is based on number of rows/2 --> needs to be based on pio
+						if (read_prev_address == (half_num_rows)) begin // 20 is based on number of rows/2 --> needs to be based on pio
 							u_center[i] <= u_curr[i];
 						end
 
@@ -732,6 +708,9 @@ generate
                         
                         // state transition 
                         if (top_flag) begin // we've finished the column
+							// if (i == 1'd0) begin
+							done_done[i] <= 1'b1;
+							// end
 							if (audio_request) begin // wait for audio bus master state machine to send a request for a new iteration 
 
 								// restart from the bottom!
@@ -748,7 +727,8 @@ generate
 								// idx[i] <= 18'd0;
 								addr_idx <= 19'd0;
 
-								state <= 5'd3;
+								state <= 5'd2;
+
 							end
 							else begin
 								state <= 5'd6;
@@ -770,9 +750,6 @@ generate
                                 top_flag <= 1'b1;
                                 read_curr_address <= 19'd0;
                             end
-							if ((addr_idx == num_rows - 19'd1) && (i == 19'd169)) begin
-								done_done <= 1'b1;
-							end
 
                             state <= 5'd4;
                         end
@@ -840,7 +817,7 @@ always @(posedge CLOCK_50) begin //CLOCK_50
 	// audio_request <= audio_request_ack[15];
 
 	// reset state machine and read/write controls
-	if (~KEY[0]) begin
+	if (~KEY[0] || pio_reset) begin
 		state <= 0 ;
 		bus_read <= 0 ; // set to one if a read opeation from bus
 		bus_write <= 0 ; // set to one if a write operation to bus
@@ -1062,17 +1039,14 @@ Computer_System The_System (
 	.hps_io_hps_io_usb1_inst_STP		(HPS_USB_STP),
 	.hps_io_hps_io_usb1_inst_DIR		(HPS_USB_DIR),
 	.hps_io_hps_io_usb1_inst_NXT		(HPS_USB_NXT),
-	.pio_init_export                 (pio_init),    //                            pio_init.export
-	.pio_init_done_export            (pio_init_done[0]),//                       pio_init_done.export
-	.pio_init_val_export             (pio_init_val),
-	.pio_reset_export                (~KEY[0]),
+	.pio_reset_export                (pio_reset),
 	.pll_fast_clk_100_outclk0_clk    (pll_fast_clk_100),                    //            pll_fast_clk_100_outclk0.clk
 	.pll_fast_clk_100_locked_export  (pll_fast_clk_100_locked),                   //             pll_fast_clk_100_locked.export
 	.pio_num_rows_export             (num_rows),
 	.pio_rho_export                  (pio_rho),
-	.pio_initial_value_export        (pio_initial_value), // CAN DELETE: NOT USING            
 	.pio_step_y_export           	 (pio_step_y),
-	.pio_done_done_export            (done_done)   
+	.pio_done_done_export            (done_done[0]),
+	.pio_damping_export              (pio_damping)   
 );
 
 endmodule
@@ -1084,6 +1058,7 @@ endmodule
 
 module drum_syn (
     input wire         [17:0] rho,
+	input wire         [31:0] damping, 
 
     input wire signed  [17:0] u_top,
     input wire signed  [17:0] u_bottom,
@@ -1114,7 +1089,6 @@ module drum_syn (
     assign int_sum = int_dif_left + int_dif_right + int_dif_bottom + int_dif_top;
     assign int_mid = (rho_mult + (u_curr <<< 1) - u_prev + (u_prev >>> 10));
     assign u_next = int_mid - (int_mid >>> 10);
-	//assign u_next = int_mid;
 
     signed_mult rho_mult_inst (
         .out (rho_mult),
