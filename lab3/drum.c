@@ -146,7 +146,7 @@ void * scan_thread () {
 }
 
 ///////////////////////////////////////////////////////////////
-					//// prints time ////
+//// prints time ////
 ///////////////////////////////////////////////////////////////
 
 void print_stats(){
@@ -211,8 +211,6 @@ int main(void)
 	}
     
     // Get the address that maps to the FPGA pixel buffer
-	//vga_pixel_ptr =(unsigned int *)(vga_pixel_virtual_base);
-
 
 	pio_reset_addr 				= (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_BASE );
 	pio_num_rows_addr 			= (unsigned int *)(h2p_lw_virtual_base +  PIO_NUM_ROWS_BASE );
@@ -252,10 +250,6 @@ int main(void)
 				*pio_num_rows_addr = temp_rows;
 				*pio_step_y_addr =float2fix17(temp_init/(temp_rows/2.0));
 				print_stats();
-
-				// *pio_reset_addr = 1;
-				// *pio_reset_addr = 0;
-				// *pio_reset_addr = 1;
 			break;
 
 			case 1:
@@ -264,10 +258,6 @@ int main(void)
 				scanf("%f", &temp_init);
 				*pio_step_y_addr =float2fix17(temp_init/(temp_rows/2.0));
 				print_stats();
-
-				// *pio_reset_addr = 1;
-				// *pio_reset_addr = 0;
-				// *pio_reset_addr = 1;
 
 			break;
 
@@ -278,29 +268,9 @@ int main(void)
 				*pio_rho_addr = float2fix17(temp_rho);
 				print_stats();
 
-				// *pio_reset_addr = 1;
-				// *pio_reset_addr = 0;
-				// *pio_reset_addr = 1;
-
-
 			break;
 
-			// case 3:
-
-			// 	printf("Enter damping value: ");
-			// 	scanf("%f", &temp_damping);
-			// 	*pio_damping_addr = float2fix17(temp_damping);
-
-			// 	*pio_reset_addr = 1;
-			// 	*pio_reset_addr = 0;
-			// 	*pio_reset_addr = 1;
-			// 	print_stats();
-
-			// break;
-			
-
 		}
-
 
 	}
 
