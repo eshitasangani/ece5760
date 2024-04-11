@@ -87,65 +87,6 @@ int idx = 0;
 int set = 0;
 
 ///////////////////////////////////////////////////////////////
-// scan thread  // 
-///////////////////////////////////////////////////////////////
-void * scan_thread () { 
-	while (1) {
-		printf("0: number of rows; 1: change initial value; 2: change rho 3: damping \n");
-		scanf("%i", &set);
-
-		switch ( set ) {
-
-			case 0:
-
-				printf("Enter number of rows: ");
-				scanf("%d", &temp_rows);
-				*pio_num_rows_addr = temp_rows;
-				*pio_step_y_addr =float2fix17(temp_init/temp_rows/2.0);
-				*pio_reset_addr = 1;
-				*pio_reset_addr = 0;
-
-			break;
-
-			case 1:
-
-				printf("Enter initial value: ");
-				scanf("%f", &temp_init);
-				*pio_step_y_addr =float2fix17(temp_init/temp_rows/2.0);
-
-				*pio_reset_addr = 1;
-				*pio_reset_addr = 0;
-
-			break;
-
-			case 2:
-
-				printf("Enter rho value: ");
-				scanf("%f", &temp_rho);
-				*pio_rho_addr = float2fix17(temp_rho);
-
-				*pio_reset_addr = 1;
-				*pio_reset_addr = 0;
-			break;
-
-			case 3:
-
-				printf("Enter damping value: ");
-				scanf("%f", &temp_damping);
-				*pio_damping_addr = float2fix17(temp_damping);
-
-				*pio_reset_addr = 1;
-				*pio_reset_addr = 0;
-
-			break;
-
-		}
-
-	}
-
-}
-
-///////////////////////////////////////////////////////////////
 //// prints time ////
 ///////////////////////////////////////////////////////////////
 
@@ -234,9 +175,6 @@ int main(void)
 	temp_rho 	= 0.25;
 	temp_step 	= 0.002;
 	
-
-	// I DONT REALLY GET IT BUT SOMETIMES IT BREAKS YOUR EARDRUMS GOODLUCK ESHITA
-
 	while (1) {
 		printf("0: number of rows; 1: change initial value; 2: change rho 3: damping \n");
 		scanf("%i", &set);
