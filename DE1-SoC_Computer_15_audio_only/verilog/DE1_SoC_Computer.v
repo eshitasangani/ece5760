@@ -176,7 +176,6 @@ module DE1_SoC_Computer (
 //  PARAMETER declarations
 //=======================================================
 
-
 //=======================================================
 //  PORT declarations
 //=======================================================
@@ -502,7 +501,6 @@ generate
                 // start at bottom 
                 read_prev_address <= 19'd0; 
                 read_curr_address <= 19'd0;
-				// idx[i] <= 18'd0;
 
                 // set bottom boundary condition 
                 u_bottom <= 18'd0; 
@@ -521,7 +519,6 @@ generate
                             write_curr_address <= 19'd0;
                             write_curr_en   <= 1'b0;
                             write_prev_en   <= 1'b0;
-                            // u_curr[i] <= u_top;
                             state <= 5'd2;
 							done_done[i] <= 1'b0;
                         end
@@ -529,29 +526,32 @@ generate
                         write_curr_en <= 1'b1;
                         write_prev_en <= 1'b1;
 						
-				if ( i <= 19'd85 ) begin
-					if (addr_idx < half_num_rows) begin
+						if ( i <= 19'd85 ) begin
+							if (addr_idx < half_num_rows) begin
 
-						if (i > addr_idx) begin
-							write_prev_data <= write_prev_data + pio_step_y;
-				write_curr_data <= write_prev_data + pio_step_y;
-						end
-						else if (i <= addr_idx) begin
-							write_prev_data <= write_prev_data;
-				write_curr_data <= write_prev_data;
-						end
-					end
-					else if (addr_idx >= half_num_rows) begin
+								if (i > addr_idx) begin
+									write_prev_data <= write_prev_data + pio_step_y;
+									write_curr_data <= write_prev_data + pio_step_y;
+								end
+								else if (i <= addr_idx) begin
+									write_prev_data <= write_prev_data;
+									write_curr_data <= write_prev_data;
+								end
+							end
 
-						if ((i + addr_idx - half_num_rows - 19'd1) < half_num_rows) begin
-							write_prev_data <= write_prev_data;
-				write_curr_data <= write_prev_data;
-						end
-						else if ((i + addr_idx - half_num_rows - 19'd1) >= half_num_rows) begin
-							write_prev_data <= write_prev_data - pio_step_y;
-				write_curr_data <= write_prev_data - pio_step_y;
-						end
-					end
+							else if (addr_idx >= half_num_rows) begin
+
+								if ((i + addr_idx - half_num_rows - 19'd1) < half_num_rows) begin
+									write_prev_data <= write_prev_data;
+									write_curr_data <= write_prev_data;
+								
+								end
+
+								else if ((i + addr_idx - half_num_rows - 19'd1) >= half_num_rows) begin
+									write_prev_data <= write_prev_data - pio_step_y;
+									write_curr_data <= write_prev_data - pio_step_y;
+								end
+							end
 
 				end
 				else if (i > 19'd85) begin
@@ -563,30 +563,30 @@ generate
 						end
 						else if ((addr_idx + i - 19'd84) >= half_num_rows) begin
 							write_prev_data <= write_prev_data;
-				write_curr_data <= write_prev_data;
+							write_curr_data <= write_prev_data;
 						end
 					end
+					
 					else if (addr_idx >= half_num_rows) begin
 
 						if (i < addr_idx) begin
 							write_prev_data <= write_prev_data;
-				write_curr_data <= write_prev_data;
+							write_curr_data <= write_prev_data;
 						end
+
 						else if (i >= addr_idx) begin
 							write_prev_data <= write_prev_data - pio_step_y;
-				write_curr_data <= write_prev_data - pio_step_y;
+							write_curr_data <= write_prev_data - pio_step_y;
 						end
 	
 					end
 	
 				end
-                        
                             addr_idx <= addr_idx + 19'd1;
 							write_prev_address <= write_prev_address + 19'd1;
 							write_curr_address <= write_curr_address + 19'd1;
                             state <= 5'd0;
                         end
-                        // idx   <= idx + 6'd1;
                             
                         
                     end
@@ -692,8 +692,6 @@ generate
     end
 endgenerate
 
-
-
 //=======================================================
 // Bus controller for AVALON bus-master
 //=======================================================
@@ -732,9 +730,6 @@ assign GPIO_0[2] = bus_ack ;
 assign GPIO_0[3] = audio_request;
 
 always @(posedge CLOCK_50) begin //CLOCK_50
-
-	// connect synchronization signals
-	// audio_request <= audio_request_ack[15];
 
 	// reset state machine and read/write controls
 	if (~KEY[0] || pio_reset) begin
@@ -978,7 +973,6 @@ endmodule
 module drum_syn (
     input wire         [17:0] rho,
 	input wire         [31:0] damping, 
-
     input wire signed  [17:0] u_top,
     input wire signed  [17:0] u_bottom,
     input wire signed  [17:0] u_left,
@@ -1034,37 +1028,6 @@ module signed_mult (out, a, b);
 endmodule
 
 //////////////////////////////////////////////////
-
-
-//////////////////////////////////////////////////
-/////////////// enable register //////////////////
-//////////////////////////////////////////////////
-
-module enable_reg #(parameter BITWIDTH = 27) (
-	input  wire clk, 
-	input  wire rst, 
-	input  wire en, 
-	input  wire signed [BITWIDTH-1:0] d, 
-	output wire signed [BITWIDTH-1:0] q);
-
-    reg signed [BITWIDTH-1:0] d_reg;
-
-    always @(posedge clk) begin
-        if (rst) begin
-            d_reg <= 27'd0;
-        end
-        else if (en) begin
-            d_reg <= d;
-        end
-        else begin
-            d_reg <= q;
-        end
-    end
-
-    assign q = d_reg;
-
-endmodule 
-
 
 //============================================================
 // M10K module for testing
