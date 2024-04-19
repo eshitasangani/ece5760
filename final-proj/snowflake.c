@@ -1,30 +1,6 @@
-///////////////////////////////////////
-/// Final Project
-/// compile with
-/// gcc snowflake.c -o snow -lm -O3 
-///////////////////////////////////////
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
-
-#include <unistd.h>
-#include <fcntl.h>
-#include <math.h>
-#include <sys/types.h>
-#include <string.h>
-// interprocess comm
-#include <sys/ipc.h> 
-#include <sys/shm.h> 
-#include <sys/mman.h>
-#include <time.h>
-// network stuff
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h> 
-// #include "address_map_arm_brl4.h"
-// #include <pthread.h>
 
 #define WIDTH 51
 #define HEIGHT 51
@@ -41,6 +17,7 @@ typedef struct {
 } Cell;
 
 Cell cells[WIDTH][HEIGHT];
+float s_vals[WIDTH][HEIGHT]; // Array to store s values for visualization or debugging
 
 // Get neighbors for a specific coordinate
 int get_neighbors(Cell* neighbors[], int x, int y) {
@@ -59,13 +36,32 @@ void initialize_grid() {
         for (int j = 0; j < HEIGHT; j++) {
             cells[i][j].s = BETA;
             cells[i][j].is_receptive = false;
+            s_vals[i][j] = BETA; // Initialize s_vals
         }
     }
     // Set the center cell
     cells[WIDTH/2][HEIGHT/2].s = 1.0;
     cells[WIDTH/2][HEIGHT/2].is_receptive = true;
+    s_vals[WIDTH/2][HEIGHT/2] = 1.0; // Set center in s_vals
 }
 
+void update_s_vals() {
+    for (int i = 0; i < WIDTH; i++) {
+        for (int j = 0; j < HEIGHT; j++) {
+            s_vals[i][j] = cells[i][j].s;
+        }
+    }
+}
+
+void print_s_vals() {
+    for (int i = 0; i < WIDTH; i++) {
+        for (int j = 0; j < HEIGHT; j++) {
+            printf("%.2f ", s_vals[i][j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
 
 void one_iter() {
     Cell* neighbors[NUM_NEIGHBORS];
@@ -115,18 +111,16 @@ void one_iter() {
     }
 }
 
-
 int main() {
     initialize_grid();
 
-    // Run the simulation for 100 iterations as an example
+    // run the simulation for 100 iterations as an example
     for (int iter = 0; iter < 100; iter++) {
         one_iter();
+        update_s_vals();
+        printf("Iteration %d:\n", iter + 1);
+        print_s_vals();
     }
 
     return 0;
 }
-
-
-
-
