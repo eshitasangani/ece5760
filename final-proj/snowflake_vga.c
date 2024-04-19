@@ -46,6 +46,9 @@ void VGA_xz(float,float);
 	*(short *)pixel_ptr = (color);\
 } while(0)
 
+
+#define rgb(r,g,b) ((((r)&7)<<5) | (((g)&7)<<2) | (((b)&3)))
+
 // the light weight buss base
 void *h2p_lw_virtual_base;
 
@@ -60,8 +63,10 @@ void *vga_char_virtual_base;
 // /dev/mem file id
 int fd;
 
-///////////////////////////////////////////////// 
+// loop identifiers
+int i,j,k;
 
+///////////////////////////////////////////////// 
 #define WIDTH 51
 #define HEIGHT 51
 #define ALPHA 1
@@ -77,6 +82,7 @@ typedef struct {
 } Cell;
 
 Cell cells[WIDTH][HEIGHT];
+float s_vals[WIDTH][HEIGHT]; // Array to store s values for visualization or debugging
 
 // Get neighbors for a specific coordinate
 int get_neighbors(Cell* neighbors[], int x, int y) {
@@ -91,25 +97,44 @@ int get_neighbors(Cell* neighbors[], int x, int y) {
 }
 
 void initialize_grid() {
-    for (int i = 0; i < WIDTH; i++) {
-        for (int j = 0; j < HEIGHT; j++) {
+    for (i = 0; i < WIDTH; i++) {
+        for (j = 0; j < HEIGHT; j++) {
             cells[i][j].s = BETA;
             cells[i][j].is_receptive = false;
+            s_vals[i][j] = BETA; // Initialize s_vals
         }
     }
     // Set the center cell
     cells[WIDTH/2][HEIGHT/2].s = 1.0;
     cells[WIDTH/2][HEIGHT/2].is_receptive = true;
+    s_vals[WIDTH/2][HEIGHT/2] = 1.0; // Set center in s_vals
 }
 
+void update_s_vals() {
+    for (i = 0; i < WIDTH; i++) {
+        for (j = 0; j < HEIGHT; j++) {
+            s_vals[i][j] = cells[i][j].s;
+        }
+    }
+}
+
+void print_s_vals() {
+    for (i = 0; i < WIDTH; i++) {
+        for (j = 0; j < HEIGHT; j++) {
+            printf("%.2f ", s_vals[i][j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
 
 void one_iter() {
     Cell* neighbors[NUM_NEIGHBORS];
     int num_neighbors;
 
     // Determine receptive sites
-    for (int i = 0; i < WIDTH; i++) {
-        for (int j = 0; j < HEIGHT; j++) {
+    for (i = 0; i < WIDTH; i++) {
+        for (j = 0; j < HEIGHT; j++) {
             if (cells[i][j].is_receptive) {
                 cells[i][j].u = 0;
                 cells[i][j].v = cells[i][j].s;
@@ -122,12 +147,12 @@ void one_iter() {
     }
 
     // Diffusion process
-    for (int i = 0; i < WIDTH; i++) {
-        for (int j = 0; j < HEIGHT; j++) {
+    for (i = 0; i < WIDTH; i++) {
+        for (j = 0; j < HEIGHT; j++) {
             num_neighbors = get_neighbors(neighbors, i, j);
             float sum_u = 0;
 
-            for (int k = 0; k < num_neighbors; k++) {
+            for (k = 0; k < num_neighbors; k++) {
                 sum_u += neighbors[k]->u;
             }
             float u_avg = sum_u / num_neighbors;
@@ -139,7 +164,7 @@ void one_iter() {
                 cells[i][j].is_receptive = true;
             } else {
                 bool any_frozen = false;
-                for (int k = 0; k < num_neighbors; k++) {
+                for ( k = 0; k < num_neighbors; k++) {
                     if (neighbors[k]->s >= 1) {
                         any_frozen = true;
                         break;
@@ -151,18 +176,32 @@ void one_iter() {
     }
 }
 
+void draw_VGA_test(){
+	// index by the cell numbers
+	for (i = 0; i < 320; i++) {  // column number (x)
+		for (j = 0; j < 238; j++ ) { // row number (y)
+			// void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
+			if (j % 2 == 0) VGA_box(2*i, 2*(j-1), 2*(i+2), 2*(j-3), rgb(7,0,0));
+			else 			VGA_box(2*i, 2*j    , 2*(i+2), 2*(j-2), rgb(7,2,0));
+			
+		}
+	}
+}
 
 int main() {
+	// draw_VGA_test();
     initialize_grid();
 
-    // Run the simulation for 100 iterations as an example
-    for (int iter = 0; iter < 100; iter++) {
-        one_iter();
-    }
+    // run the simulation for 100 iterations as an example
+    // for (int iter = 0; iter < 100; iter++) {
+    //     one_iter();
+    //     update_s_vals();
+    //     printf("Iteration %d:\n", iter + 1);
+    //     print_s_vals();
+    // }
 
     return 0;
 }
-
 
 /****************************************************************************************
  * Subroutine to send a string of text to the VGA monitor 
