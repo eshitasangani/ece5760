@@ -146,9 +146,8 @@ void one_iter() {
     Cell* neighbors[NUM_NEIGHBORS];
     int num_neighbors;
 
-    // Determine receptive sites
-    for (i = 0; i < WIDTH; i++) {
-        for (j = 0; j < HEIGHT; j++) {
+    for (int i = 0; i < WIDTH; i++) {
+        for (int j = 0; j < HEIGHT; j++) {
             if (cells[i][j].is_receptive) {
                 cells[i][j].u = 0;
                 cells[i][j].v = cells[i][j].s;
@@ -160,13 +159,11 @@ void one_iter() {
         }
     }
 
-    // Diffusion process
-    for (i = 0; i < WIDTH; i++) {
-        for (j = 0; j < HEIGHT; j++) {
+    for (int i = 0; i < WIDTH; i++) {
+        for (int j = 0; j < HEIGHT; j++) {
             num_neighbors = get_neighbors(neighbors, i, j);
             float sum_u = 0;
-
-            for (k = 0; k < num_neighbors; k++) {
+            for (int k = 0; k < num_neighbors; k++) {
                 sum_u += neighbors[k]->u;
             }
             float u_avg = sum_u / num_neighbors;
@@ -178,7 +175,7 @@ void one_iter() {
                 cells[i][j].is_receptive = true;
             } else {
                 bool any_frozen = false;
-                for ( k = 0; k < num_neighbors; k++) {
+                for (int k = 0; k < num_neighbors; k++) {
                     if (neighbors[k]->s >= 1) {
                         any_frozen = true;
                         break;
@@ -204,7 +201,7 @@ void draw_VGA_test(){
 
 int main() {
 	// draw_VGA_test();
-    initialize_grid();
+    // initialize_grid();
 
     // run the simulation for 100 iterations as an example
     // for (int iter = 0; iter < 100; iter++) {
