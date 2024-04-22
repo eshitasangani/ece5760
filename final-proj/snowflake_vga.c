@@ -176,38 +176,49 @@ void print_u_vals() {
 
 bool any_frozen = false;
 float u_avg = 0.0;
-
+// int count = 0;
 
 void one_iter() {
 
     // Determine receptive sites
-    for ( i = 0; i < WIDTH; i++) {
-        for ( j = 0; j < HEIGHT; j++) {
+    for ( i = 0; i < 51; i++) {
+        for ( j = 0; j < 51; j++) {
+			// count++;
+			// printf("%d", count);
+			// printf("\n");
+			printf("%d ", i);
+			printf("%d ", j);
+			printf("\n");
             if (cells[i][j].is_receptive) {
                 cells[i][j].u = 0;
                 cells[i][j].v = cells[i][j].s;
                 cells[i][j].s = cells[i][j].v + GAMMA;
-            } else {
+            } 
+			else {
                 cells[i][j].u = cells[i][j].s;
                 cells[i][j].v = 0;
             }
         }
+		// printf("%.2f ", i);
+		// printf("%.2f ", j);
     }
 
+
+
     // Diffusion process
-	for (i = 0; i < WIDTH; i++) {
-		for (j = 0; j < HEIGHT; j++) {
-			num_neighbors = get_neighbors(neighbors, i, j);
-			if (num_neighbors > 0) { // make sure there are neighbors so we can avoid division bt 0
-				float sum_u = 0;
+	// for (i = 0; i < WIDTH; i++) {
+	// 	for (j = 0; j < HEIGHT; j++) {
+	// 		num_neighbors = get_neighbors(neighbors, i, j);
+	// 		if (num_neighbors > 0) { // make sure there are neighbors so we can avoid division bt 0
+	// 			float sum_u = 0;
 
-				for (k = 0; k < num_neighbors; k++) {
-					sum_u += neighbors[k]->u; // Sum u values of all neighbors
-				}
+	// 			for (k = 0; k < num_neighbors; k++) {
+	// 				sum_u += neighbors[k]->u; // Sum u values of all neighbors
+	// 			}
 
-				u_avg = sum_u / num_neighbors; // Calculate average u
-				cells[i][j].u += ALPHA / 2 * (u_avg - cells[i][j].u); // Update u based on the diffusion equation
-				cells[i][j].s = cells[i][j].u + cells[i][j].v; // Update total s
+	// 			u_avg = sum_u / num_neighbors; // Calculate average u
+	// 			cells[i][j].u += ALPHA / 2 * (u_avg - cells[i][j].u); // Update u based on the diffusion equation
+	// 			cells[i][j].s = cells[i][j].u + cells[i][j].v; // Update total s
 
 				// Update receptiveness based on the new sp
 				// if (cells[i][j].s >= 1) {
@@ -226,15 +237,15 @@ void one_iter() {
 					// cells[i][j].is_receptive = any_frozen;
 				// }
 
-			} // end of if statment checking to make sure if we have neighbors or not 
+			//} // end of if statment checking to make sure if we have neighbors or not 
 
 			// else { // if cell has no neighbors, just make it so that it is not receptive
 
 			// 	cells[i][j].is_receptive = false;
 			// }
-		}
-	}
-}
+	// 	}
+	// }
+ }
 
 
 
