@@ -107,42 +107,87 @@ int num_neighbors;
 
 // Get neighbors for a specific coordinate
 int get_neighbors(Cell* neighbors[], int x, int y) {
+	// SET EDGE CELLS TO BE STATIC ??
     int count = 0;
- 
-    // Check left neighbor
-    if (x > 0) {
-        neighbors[count++] = &cells[x-1][y]; // Direct left
-        if (y > 0) neighbors[count++] = &cells[x-1][y-1]; // Top-left
-        if (y < HEIGHT - 1) neighbors[count++] = &cells[x-1][y+1]; // Bottom-left
-    }
 
-    // Check right neighbor
-    if (x < WIDTH - 1) {
-        neighbors[count++] = &cells[x+1][y]; // Direct right
-        if (y > 0) neighbors[count++] = &cells[x+1][y-1]; // Top-right
-        if (y < HEIGHT - 1) neighbors[count++] = &cells[x+1][y+1]; // Bottom-right
-    }
+	if (y != 0) { // top neighbor, does not rely on if the column is even or odd
+		neighbors[count++] = &cells[x][y-1];
+	}
+	if (y != HEIGHT-1) { // bottom  neighbor, does not rely on if the column is even or odd
+		neighbors[count++] = &cells[x][y+1];
+	}
+	
+	if (x % 2 == 0) { // even columns
+		if (x != 0) { // left side neighbors, the 0th column does not have left side neighbors
+			neighbors[count++] = &cells[x-1][y];
+			if (y != 0) { // only top left if y not 0
+				neighbors[count++] = &cells[x-1][y-1];
+			}
+		}
+		if (x != WIDTH-1) { // right side neighbors
+			neighbors[count++] = &cells[x+1][y];
+			if (y != 0) { // only top right if y not 0
+				neighbors[count++] = &cells[x+1][y-1];
+			}
+		}
+		
+	}
+	if (x % 2 == 1){ // odd columns
+		// odd numbered columns always have left side neighbors
+		neighbors[count++] = &cells[x-1][y];
+		if (y != HEIGHT-1) { // only bottom left if y not at bottom
+			neighbors[count++] = &cells[x-1][y+1];
+		}
 
-    // Check top and bottom neighbors
-    if (y > 0) neighbors[count++] = &cells[x][y-1]; // Direct top
-    if (y < HEIGHT - 1) neighbors[count++] = &cells[x][y+1]; // Direct bottom
+		if (x != WIDTH-1) { // right side neighbors
+			neighbors[count++] = &cells[x+1][y];
+			if (y != HEIGHT-1) { // only bottom right if y not height-1
+				neighbors[count++] = &cells[x+1][y+1];
+			}
+		}
+	}
 
     return count;
 }
 
-void initialize_grid() {
-    for ( i = 0; i < WIDTH; i++) {
-        for ( j = 0; j < HEIGHT; j++) {
-            cells[i][j].s = BETA;
-            cells[i][j].is_receptive = false;
-            cells[i][j].u = 0;
-            cells[i][j].v = 0;
-        }
-    }
-    // Set the center cell
-    cells[WIDTH/2][HEIGHT/2].s = 1.0;
-    cells[WIDTH/2][HEIGHT/2].is_receptive = true;
-}
+// // Get neighbors for a specific coordinate
+// int get_neighbors(Cell* neighbors[], int x, int y) {
+//     int count = 0;
+ 
+//     // Check left neighbor
+//     if (x > 0) {
+//         neighbors[count++] = &cells[x-1][y]; // Direct left
+//         if (y > 0) neighbors[count++] = &cells[x-1][y-1]; // Top-left
+//         if (y < HEIGHT - 1) neighbors[count++] = &cells[x-1][y+1]; // Bottom-left
+//     }
+
+//     // Check right neighbor
+//     if (x < WIDTH - 1) {
+//         neighbors[count++] = &cells[x+1][y]; // Direct right
+//         if (y > 0) neighbors[count++] = &cells[x+1][y-1]; // Top-right
+//         if (y < HEIGHT - 1) neighbors[count++] = &cells[x+1][y+1]; // Bottom-right
+//     }
+
+//     // Check top and bottom neighbors
+//     if (y > 0) neighbors[count++] = &cells[x][y-1]; // Direct top
+//     if (y < HEIGHT - 1) neighbors[count++] = &cells[x][y+1]; // Direct bottom
+
+//     return count;
+// }
+
+// void initialize_grid() {
+//     for ( i = 0; i < WIDTH; i++) {
+//         for ( j = 0; j < HEIGHT; j++) {
+//             cells[i][j].s = BETA;
+//             cells[i][j].is_receptive = false;
+//             cells[i][j].u = 0;
+//             cells[i][j].v = 0;
+//         }
+//     }
+//     // Set the center cell
+//     cells[WIDTH/2][HEIGHT/2].s = 1.0;
+//     cells[WIDTH/2][HEIGHT/2].is_receptive = true;
+// }
 
 
 
@@ -167,18 +212,42 @@ void print_s_vals() {
 void print_u_vals() {
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
-            printf("%.2f ", cells[i][j].u);
+			if (cells[i][j].u != 0.800000) { 
+				printf("%f", cells[i][j].u);
+				printf("\n");	
+			}
+			else {
+				printf("%f", cells[25][25].u);
+			}
+            
         }
         printf("\n");
     }
     printf("\n");
 }
 
+
 bool any_frozen = false;
 float u_avg = 0.0;
+float sum_u = 0.0;
+float interm = 0.0;
+
 // int count = 0;
 
 void one_iter() {
+
+	// initialize cell struct grid first 
+	for ( i = 0; i < 51; i++) {
+        for ( j = 0; j < 51; j++) {
+            cells[i][j].s = BETA;
+            cells[i][j].is_receptive = false;
+            cells[i][j].u = 0;
+            cells[i][j].v = 0;
+        }
+    }
+    // Set the center cell
+    cells[25][25].s = 1.0;
+    cells[25][25].is_receptive = true;
 
     // Determine receptive sites
     for ( i = 0; i < 51; i++) {
@@ -186,9 +255,9 @@ void one_iter() {
 			// count++;
 			// printf("%d", count);
 			// printf("\n");
-			printf("%d ", i);
-			printf("%d ", j);
-			printf("\n");
+			// printf("%d ", i);
+			// printf("%d ", j);
+			// printf("\n");
             if (cells[i][j].is_receptive) {
                 cells[i][j].u = 0;
                 cells[i][j].v = cells[i][j].s;
@@ -206,45 +275,59 @@ void one_iter() {
 
 
     // Diffusion process
-	// for (i = 0; i < WIDTH; i++) {
-	// 	for (j = 0; j < HEIGHT; j++) {
-	// 		num_neighbors = get_neighbors(neighbors, i, j);
-	// 		if (num_neighbors > 0) { // make sure there are neighbors so we can avoid division bt 0
-	// 			float sum_u = 0;
+	for (i = 0; i < 51; i++) {
+		for (j = 0; j < 51; j++) {
+			printf("%d ", i);
+			printf("%d ", j);
+			// printf("\n");
+			
+			num_neighbors = get_neighbors(neighbors, i, j);
+			printf("%d ", num_neighbors);
+			printf("\n");
+			if (num_neighbors > 0) { // make sure there are neighbors so we can avoid division bt 0
+				sum_u = 0;
 
-	// 			for (k = 0; k < num_neighbors; k++) {
-	// 				sum_u += neighbors[k]->u; // Sum u values of all neighbors
-	// 			}
+				for (k = 0; k < num_neighbors; k++) {
+					sum_u += neighbors[k]->u; // Sum u values of all neighbors
+				}
 
-	// 			u_avg = sum_u / num_neighbors; // Calculate average u
-	// 			cells[i][j].u += ALPHA / 2 * (u_avg - cells[i][j].u); // Update u based on the diffusion equation
-	// 			cells[i][j].s = cells[i][j].u + cells[i][j].v; // Update total s
+				u_avg = sum_u / num_neighbors; // Calculate average u
+				// printf("%f", u_avg);
+				// interm = (u_avg - cells[i][j].u );
+				cells[i][j].u += 0.5 ;
+				
+				// printf("%f", cells[i][j].u);
+				
+				// cells[i][j].u = cells[i][j].u + (ALPHA / 2 * (u_avg - cells[i][j].u));
+				// cells[i][j].u += ALPHA / 2 * (u_avg - cells[i][j].u); // Update u based on the diffusion equation
+				// cells[i][j].s = cells[i][j].u + cells[i][j].v; // Update total s
 
-				// Update receptiveness based on the new sp
-				// if (cells[i][j].s >= 1) {
-				// 	cells[i][j].is_receptive = true;
-				// } 
-				// ^^ that if statement is causing the seg fault? im not sure why tho 
+			// 	// Update receptiveness based on the new sp
+			// 	if (cells[i][j].s >= 1) {
+			// 		cells[i][j].is_receptive = true;
+			// 	} 
+			// 	// ^^ that if statement is causing the seg fault? im not sure why tho 
 
-				// else {
-					// any_frozen = false;
-					// for (k = 0; k < num_neighbors; k++) {
-					// 	if (neighbors[k]->s >= 1) {
-					// 		any_frozen = true;
-					// 		break;
-					// 	}
-					// }
-					// cells[i][j].is_receptive = any_frozen;
-				// }
+			// 	else {
+			// 		any_frozen = false;
+			// 		for (k = 0; k < num_neighbors; k++) {
+			// 			if (neighbors[k]->s >= 1) {
+			// 				any_frozen = true;
+			// 				break;
+			// 			}
+			// 		}
+			// 		cells[i][j].is_receptive = any_frozen;
+			// 	}
 
-			//} // end of if statment checking to make sure if we have neighbors or not 
+			} 
+			// end of if statment checking to make sure if we have neighbors or not 
 
 			// else { // if cell has no neighbors, just make it so that it is not receptive
 
 			// 	cells[i][j].is_receptive = false;
 			// }
-	// 	}
-	// }
+		}
+	}
  }
 
 
@@ -456,7 +539,10 @@ int main(void)
 	// run_snow();
 	 one_iter();
 	// update_s_vals();
-//	print_u_vals();
+	// print_u_vals();
+	printf("%f", cells[25][25].u);
+	printf("%f", cells[25][25].v);
+	printf("%f", cells[25][25].s);
 	// clear the text
 	// VGA_text_clear();
 
