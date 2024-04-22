@@ -26,25 +26,56 @@ initial begin
     reset  = 1'b0;
 end
 
-wire [17:0] u_neighbors [0:5];
+wire signed [17:0] u_neighbor_0;
+wire signed [17:0] u_neighbor_1;
+wire signed [17:0] u_neighbor_2;
+wire signed [17:0] u_neighbor_3;
+wire signed [17:0] u_neighbor_4;
+wire signed [17:0] u_neighbor_5;
 
-assign u_neighbors[0] = 18'b00_0000000000010000;
-assign u_neighbors[1] = 18'b00_0001000000000000;
-assign u_neighbors[2] = 18'b00_0000001000000000;
-assign u_neighbors[3] = 18'b00_0000010000000000;
-assign u_neighbors[4] = 18'b00_0000010000000000;
-assign u_neighbors[5] = 18'b00_1000000000000000;
+assign u_neighbor_0 = 18'b00_0000000000010000;
+assign u_neighbor_1 = 18'b00_0001000000000000;
+assign u_neighbor_2 = 18'b00_0000001000000000;
+assign u_neighbor_3 = 18'b00_0000010000000000;
+assign u_neighbor_4 = 18'b00_0000010000000000;
+assign u_neighbor_5 = 18'b00_1000000000000000;
+
+wire signed [17:0] alpha;
+assign alpha = 18'b01_0000000000000000;
+
+wire signed [17:0] beta;
+assign beta = 18'b00_0100000000000000;
+
+wire is_frozen;
+wire signed [17:0] u_next;
+reg  signed [17:0] u_curr;
+
+always @(posedge clk) begin
+    if (reset) begin
+        u_curr <= beta;
+    end
+    else begin
+        u_curr <= u_next;
+    end
+end
+
+
 
 diffusion_solver solver_inst (
-    .u_neighbors(u_neighbors),
-    .u_curr     (beta),
-    .v_next     (18'd0),
-    .alpha      (alpha),
-    .beta       (beta),
-    
-    .u_next     (u_next),
-    .is_frozen  (is_frozen)
-)
+    .u_neighbor_0 (u_neighbor_0),
+    .u_neighbor_1 (u_neighbor_1),
+    .u_neighbor_2 (u_neighbor_2),
+    .u_neighbor_3 (u_neighbor_3),
+    .u_neighbor_4 (u_neighbor_4),
+    .u_neighbor_5 (u_neighbor_5),
+    .u_curr       (u_curr),
+    .v_next       (18'd0),
+    .alpha        (alpha),
+    .beta         (beta),
+      
+    .u_next       (u_next),
+    .is_frozen    (is_frozen)
+);
 
 endmodule
 
@@ -62,28 +93,34 @@ neighbor indexing:
     u_avg = avg u over all neighbors
 */
 module diffusion_solver (
-    input  wire [17:0] u_neighbors [0:5],
-    input  wire [17:0] u_curr,
-    input  wire [17:0] v_next, // this is calculated outside of this module, when we calculate our current u and v
+    input  wire signed [17:0] u_neighbor_0,
+    input  wire signed [17:0] u_neighbor_1,
+    input  wire signed [17:0] u_neighbor_2,
+    input  wire signed [17:0] u_neighbor_3,
+    input  wire signed [17:0] u_neighbor_4,
+    input  wire signed [17:0] u_neighbor_5,
+    input  wire signed [17:0] u_curr,
+    input  wire signed [17:0] v_next, // this is calculated outside of this module, when we calculate our current u and v
 
-    input  wire [17:0] alpha,
-    input  wire [17:0] beta,
+    input  wire signed [17:0] alpha,
+    input  wire signed [17:0] beta,
 
-    output wire [17:0] u_next,
+    output wire signed [17:0] u_next,
 
     output wire        is_frozen
 );
 
-    wire [17:0] u_avg;
-    wire [17:0] laplace_out;
+    wire signed [17:0] u_avg;
+    wire signed [17:0] laplace_out;
 
     // s = u + v
     // frozen if s >= 1
     assign is_frozen = ((u_next + v_next) >= 18'b01_0000000000000000);
+    assign u_next = u_curr + laplace_out;
 
     signed_mult u_avg_calc ( // divide by 6 (num neighbors) -- mult by 1/6
         .out(u_avg),
-        .a  (u_neighbors[0]+u_neighbors[1]+u_neighbors[2]+u_neighbors[3]+u_neighbors[4]+u_neighbors[5]),
+        .a  (u_neighbor_0+u_neighbor_1+u_neighbor_2+u_neighbor_3+u_neighbor_4+u_neighbor_5),
         .b  (18'b00_0010101010101010)
     );
 
