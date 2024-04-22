@@ -226,47 +226,102 @@ void draw_VGA_test(){
 	}
 }
 
-// need to map the # of neighbors to the columns on teh vga 
-int color[];
+// need to map the # of neighbors to the columns on the vga 
 
-void run_snow() {
-	// this runs snowflake gen for 1 iteration + updates the cells 
-	// one_iter();
-	// update s array
-	// update_s_vals();
+// void run_snow() {
+// 	// this runs snowflake gen for 1 iteration + updates the cells 
+// 	// one_iter();
+// 	// update s array
+// 	// update_s_vals();
 
-	for (i = 0; i < WIDTH; i++) { 
-		for (j = 0; j < HEIGHT; j++){
-			if (s_vals[i][j] >= 1 ) { 
-				// means it is frozen 
-				color = 0x1d;
-				// VGA_box(i-1, j-1, i+1, j+1, 0x1d);
-			}
-			else { 
-				color = 0x1c;
-				// VGA_box(i, j, i-1, j-1, 0x1b);
-			}
+// 	for (i = 0; i < WIDTH; i++) { 
+// 		for (j = 0; j < HEIGHT; j++){
+// 			if (s_vals[i][j] >= 1 ) { 
+// 				// means it is frozen 
+// 				color = 0x1d;
+// 				// VGA_box(i-1, j-1, i+1, j+1, 0x1d);
+// 			}
+// 			else { 
+// 				color = 0x1c;
+// 				// VGA_box(i, j, i-1, j-1, 0x1b);
+// 			}
 
-			// draw even // odd columns 
-		}
-	}
+// 			// draw even // odd columns 
+// 		}
+// 	}
 
-	// now actually draw on the vga 
-	for (i = 1; i < 640; i++) {  // column number (x)
-		for (j = 1; j < 480; j++ ) { // row number (y)
-			// void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
-			if (j % 2 == 0) {
-				// VGA_PIXEL(2*i, 2*(j-1), 2*(i+2), 2*(j-3), 0x1d);
-				VGA_box(i-1, j-1, i+1, j+1, color);
-			}  
-			else{
-				VGA_box(i, j, i-1, j-1, color);
-			}
-		}
-	}
+// 	// now actually draw on the vga 
+// 	for (i = 1; i < 640; i++) {  // column number (x)
+// 		for (j = 1; j < 480; j++ ) { // row number (y)
+// 			// void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
+// 			if (j % 2 == 0) {
+// 				// VGA_PIXEL(2*i, 2*(j-1), 2*(i+2), 2*(j-3), 0x1d);
+// 				VGA_box(i-1, j-1, i+1, j+1, color);
+// 			}  
+// 			else{
+// 				VGA_box(i, j, i-1, j-1, color);
+// 			}
+// 		}
+// 	}
 
+// }
+
+// Define the size of a square cell in pixels
+#define CELL_SIZE 8
+
+void draw_snowflakes() {
+    one_iter(); // update the states
+
+    for (int i = 0; i < WIDTH; i++) {
+        for (int j = 0; j < HEIGHT; j++) {
+            // top-left corner of the square for this cell
+            int x = i * CELL_SIZE;
+            int y = j * CELL_SIZE;
+
+            // If odd row, add half the cell width to x
+            if (j % 2 != 0) {
+                x += CELL_SIZE / 2;
+            }
+
+            // determine the color based on whether the cell is frozen
+			// white for frozen, black otherwise
+            short color = cells[i][j].is_receptive ? rgb(3, 3, 3) : rgb(0, 0, 0); 
+
+			// draw onto the vga 
+            VGA_box(x, y, x + CELL_SIZE - 1, y + CELL_SIZE - 1, color);
+        }
+    }
 }
-	
+
+
+/// even odd columbs based on the neighbors
+// loops through the s values
+void run_snow() {
+    one_iter(); 
+    update_s_vals();  // Update s values for drawing
+
+    // Loop through s_vals to draw each cell on the VGA screen
+    for (int i = 0; i < WIDTH; i++) {
+        for (int j = 0; j < HEIGHT; j++) {
+            int x1 = i * 2;  // X start pixel
+            int y1 = j * 2;  // Y start pixel
+
+            // Adjust for odd columns
+            if (j % 2 == 1) {
+                y1++;
+            }
+
+            // Set the color based on the cell's state
+			// frozen cells are white and others are black 
+            short color = (s_vals[i][j] >= 1) ? rgb(3, 3, 3) : rgb(0, 0, 0);
+
+            // Draw the cell as a 2x2 pixel square
+            VGA_box(x1, y1, x1 + 1, y1 + 1, color);
+        }
+    }
+}
+
+
 int main(void)
 {
 	//int x1, y1, x2, y2;
@@ -339,7 +394,14 @@ int main(void)
 	// VGA_box (0, 0, 639, 479, 0x1c);
 	// VGA_box (0, 0, 639, 479, 0x1d);
 
-	draw_VGA_test();
+	initialize_grid();  // Initialize the simulation grid
+
+	while (true) {
+        draw_snowflakes();  // Run simulation and update display
+        usleep(100000);  // Update every 100 ms or adjust according to desired simulation speed
+    }
+
+
 	// run_snow();
 	// clear the text
 	// VGA_text_clear();
