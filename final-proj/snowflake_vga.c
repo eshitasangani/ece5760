@@ -92,7 +92,8 @@ typedef struct {
 
 Cell cells[WIDTH][HEIGHT];
 float s_vals[WIDTH][HEIGHT]; // Array to store s values for visualization or debugging
-
+Cell* neighbors[NUM_NEIGHBORS];
+int num_neighbors;
 
 // 8-bit color
 #define rgb(r,g,b) ((((r)&7)<<5) | (((g)&7)<<2) | (((b)&3)))
@@ -143,6 +144,8 @@ void initialize_grid() {
     cells[WIDTH/2][HEIGHT/2].is_receptive = true;
 }
 
+
+
 void update_s_vals() {
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
@@ -161,9 +164,21 @@ void print_s_vals() {
     printf("\n");
 }
 
+void print_u_vals() {
+    for (i = 0; i < WIDTH; i++) {
+        for (j = 0; j < HEIGHT; j++) {
+            printf("%.2f ", cells[i][j].u);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
+
+bool any_frozen = false;
+float u_avg = 0.0;
+
+
 void one_iter() {
-    Cell* neighbors[NUM_NEIGHBORS];
-    int num_neighbors;
 
     // Determine receptive sites
     for ( i = 0; i < WIDTH; i++) {
@@ -180,35 +195,48 @@ void one_iter() {
     }
 
     // Diffusion process
-    for (i = 0; i < WIDTH; i++) {
-        for (j = 0; j < HEIGHT; j++) {
-            num_neighbors = get_neighbors(neighbors, i, j);
-            float sum_u = 0;
+	for (i = 0; i < WIDTH; i++) {
+		for (j = 0; j < HEIGHT; j++) {
+			num_neighbors = get_neighbors(neighbors, i, j);
+			if (num_neighbors > 0) { // make sure there are neighbors so we can avoid division bt 0
+				float sum_u = 0;
 
-            for (k = 0; k < num_neighbors; k++) {
-                sum_u += neighbors[k]->u;
-            }
-            float u_avg = sum_u / num_neighbors;
-            cells[i][j].u += ALPHA / 2 * (u_avg - cells[i][j].u);
-            cells[i][j].s = cells[i][j].u + cells[i][j].v;
+				for (k = 0; k < num_neighbors; k++) {
+					sum_u += neighbors[k]->u; // Sum u values of all neighbors
+				}
 
-            // Update receptiveness based on the new s
-            if (cells[i][j].s >= 1) {
-                cells[i][j].is_receptive = true;
-            } else {
-				
-                bool any_frozen = false;
-                for ( k = 0; k < num_neighbors; k++) {
-                    if (neighbors[k]->s >= 1) {
-                        any_frozen = true;
-                        break;
-                    }
-                }
-                cells[i][j].is_receptive = any_frozen;
-            }
-        }
-    }
+				u_avg = sum_u / num_neighbors; // Calculate average u
+				cells[i][j].u += ALPHA / 2 * (u_avg - cells[i][j].u); // Update u based on the diffusion equation
+				cells[i][j].s = cells[i][j].u + cells[i][j].v; // Update total s
+
+				// Update receptiveness based on the new sp
+				// if (cells[i][j].s >= 1) {
+				// 	cells[i][j].is_receptive = true;
+				// } 
+				// ^^ that if statement is causing the seg fault? im not sure why tho 
+
+				// else {
+					// any_frozen = false;
+					// for (k = 0; k < num_neighbors; k++) {
+					// 	if (neighbors[k]->s >= 1) {
+					// 		any_frozen = true;
+					// 		break;
+					// 	}
+					// }
+					// cells[i][j].is_receptive = any_frozen;
+				// }
+
+			} // end of if statment checking to make sure if we have neighbors or not 
+
+			// else { // if cell has no neighbors, just make it so that it is not receptive
+
+			// 	cells[i][j].is_receptive = false;
+			// }
+		}
+	}
 }
+
+
 
 void draw_VGA_test(){
 	// index by the cell numbers
@@ -250,76 +278,93 @@ void draw_VGA_test(){
 // 		}
 // 	}
 
-// 	// now actually draw on the vga 
-// 	for (i = 1; i < 640; i++) {  // column number (x)
-// 		for (j = 1; j < 480; j++ ) { // row number (y)
-// 			// void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
-// 			if (j % 2 == 0) {
-// 				// VGA_PIXEL(2*i, 2*(j-1), 2*(i+2), 2*(j-3), 0x1d);
-// 				VGA_box(i-1, j-1, i+1, j+1, color);
-// 			}  
-// 			else{
-// 				VGA_box(i, j, i-1, j-1, color);
-// 			}
-// 		}
-// 	}
+	// now actually draw on the vga 
+	// for (i = 1; i < 640; i++) {  // column number (x)
+	// 	for (j = 1; j < 480; j++ ) { // row number (y)
+	// 		// void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
+	// 		if (j % 2 == 0) {
+	// 			// VGA_PIXEL(2*i, 2*(j-1), 2*(i+2), 2*(j-3), 0x1d);
+	// 			VGA_box(i-1, j-1, i+1, j+1, color);
+	// 		}  
+	// 		else{
+	// 			VGA_box(i, j, i-1, j-1, color);
+	// 		}
+	// 	}
+	// }
 
 // }
 
 // Define the size of a square cell in pixels
-#define CELL_SIZE 8
+// void draw_snowflakes() {
+//     // one_iter(); // update the states
 
-void draw_snowflakes() {
-    one_iter(); // update the states
+//     for ( i = 0; i < WIDTH; i++) {
+//         for ( j = 0; j < HEIGHT; j++) {
+//             // top-left corner of the square for this cell
+//             int x = i ;
+//             int y = j ;
 
-    for (int i = 0; i < WIDTH; i++) {
-        for (int j = 0; j < HEIGHT; j++) {
-            // top-left corner of the square for this cell
-            int x = i * CELL_SIZE;
-            int y = j * CELL_SIZE;
+//             // If odd row, add half the cell width to x
+//             if (j % 2 != 0) {
+//                 x += 4;
+//             }
 
-            // If odd row, add half the cell width to x
-            if (j % 2 != 0) {
-                x += CELL_SIZE / 2;
-            }
+//             // determine the color based on whether the cell is frozen
+// 			// white for frozen, black otherwise
+//             short color = cells[i][j].is_receptive ? rgb(3, 3, 3) : rgb(0, 0, 0); 
 
-            // determine the color based on whether the cell is frozen
-			// white for frozen, black otherwise
-            short color = cells[i][j].is_receptive ? rgb(3, 3, 3) : rgb(0, 0, 0); 
+// 			// draw onto the vga 
+//             VGA_box(x, y, x + 9, y + 9, color);
+//         }
+//     }
+// }
 
-			// draw onto the vga 
-            VGA_box(x, y, x + CELL_SIZE - 1, y + CELL_SIZE - 1, color);
-        }
-    }
-}
+// width is 12 height is 9 
+// mapping 51x51 grid to a 640 by 480 grid 
 
+// void draw_snowflakes() {
+//     one_iter(); 
+//     update_s_vals();  
+
+//     for (int i = 0; i < WIDTH; i++) {
+//         for (int j = 0; j < HEIGHT; j++) {
+//             int x1 = i * 12;
+//             int y1 = j * 9;
+//             int x2 = x1 + 12 - 1;
+//             int y2 = y1 + 9 - 1;
+//             short color = (s_vals[i][j] >= 1) ? rgb(7, 7, 7) : rgb(0, 0, 0);  // White or black
+
+//             VGA_box(x1, y1, x2, y2, color);
+//         }
+//     }
+// }
 
 /// even odd columbs based on the neighbors
 // loops through the s values
-void run_snow() {
-    one_iter(); 
-    update_s_vals();  // Update s values for drawing
+// void run_snow() {
+//     one_iter(); 
+//     update_s_vals();  // Update s values for drawing
 
-    // Loop through s_vals to draw each cell on the VGA screen
-    for (int i = 0; i < WIDTH; i++) {
-        for (int j = 0; j < HEIGHT; j++) {
-            int x1 = i * 2;  // X start pixel
-            int y1 = j * 2;  // Y start pixel
+//     // Loop through s_vals to draw each cell on the VGA screen
+//     for ( i = 0; i < WIDTH; i++) {
+//         for ( j = 0; j < HEIGHT; j++) {
+//             int x1 = i * 2;  // X start pixel
+//             int y1 = j * 2;  // Y start pixel
 
-            // Adjust for odd columns
-            if (j % 2 == 1) {
-                y1++;
-            }
+//             // Adjust for odd columns
+//             if (j % 2 == 1) {
+//                 y1++;
+//             }
 
-            // Set the color based on the cell's state
-			// frozen cells are white and others are black 
-            short color = (s_vals[i][j] >= 1) ? rgb(3, 3, 3) : rgb(0, 0, 0);
+//             // Set the color based on the cell's state
+// 			// frozen cells are white and others are black 
+//             short color = (s_vals[i][j] >= 1) ? rgb(3, 3, 3) : rgb(0, 0, 0);
 
-            // Draw the cell as a 2x2 pixel square
-            VGA_box(x1, y1, x1 + 1, y1 + 1, color);
-        }
-    }
-}
+//             // Draw the cell as a 2x2 pixel square
+//             VGA_box(x1, y1, x1 + 1, y1 + 1, color);
+//         }
+//     }
+// }
 
 
 int main(void)
@@ -392,17 +437,15 @@ int main(void)
 	//VGA_text (34, 2, text_bottom_row);
 	// clear the screen
 	// VGA_box (0, 0, 639, 479, 0x1c);
-	// VGA_box (0, 0, 639, 479, 0x1d);
+	VGA_box (0, 0, 639, 479, 0x3a);
 
-	initialize_grid();  // Initialize the simulation grid
 
-	while (true) {
-        draw_snowflakes();  // Run simulation and update display
-        usleep(100000);  // Update every 100 ms or adjust according to desired simulation speed
-    }
-
+    // draw_snowflakes(); 
 
 	// run_snow();
+	 one_iter();
+	// update_s_vals();
+//	print_u_vals();
 	// clear the text
 	// VGA_text_clear();
 
