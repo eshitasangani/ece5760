@@ -26,19 +26,32 @@ initial begin
     reset  = 1'b0;
 end
 
-wire signed [17:0] u_neighbor_0;
-wire signed [17:0] u_neighbor_1;
-wire signed [17:0] u_neighbor_2;
-wire signed [17:0] u_neighbor_3;
-wire signed [17:0] u_neighbor_4;
-wire signed [17:0] u_neighbor_5;
 
-assign u_neighbor_0 = 18'b00_0000000000010000;
-assign u_neighbor_1 = 18'b00_0001000000000000;
-assign u_neighbor_2 = 18'b00_0000001000000000;
-assign u_neighbor_3 = 18'b00_0000010000000000;
-assign u_neighbor_4 = 18'b00_0000010000000000;
-assign u_neighbor_5 = 18'b00_1000000000000000;
+reg  [15:0] write_addr_u_curr;
+reg  [15:0] write_addr_v_next;
+
+reg  [15:0] read_addr_u_curr;
+reg  [15:0] read_addr_v_next;
+
+reg         write_en_u_curr;
+reg         write_en_v_next;
+
+reg  signed [17:0] write_data_u_curr;
+reg  signed [17:0] write_data_v_next;
+
+wire signed [17:0] read_data_u_curr;
+wire signed [17:0] read_data_v_next;
+
+// inputs to diffusion solver
+
+reg signed [17:0] v_next;
+reg signed [17:0] u_curr;
+reg signed [17:0] u_neighbor_0;
+reg signed [17:0] u_neighbor_1;
+reg signed [17:0] u_neighbor_2;
+reg signed [17:0] u_neighbor_3;
+reg signed [17:0] u_neighbor_4;
+reg signed [17:0] u_neighbor_5;
 
 wire signed [17:0] alpha;
 assign alpha = 18'b01_0000000000000000;
@@ -46,22 +59,11 @@ assign alpha = 18'b01_0000000000000000;
 wire signed [17:0] beta;
 assign beta = 18'b00_0100000000000000;
 
-wire is_frozen;
-reg  is_frozen_reg [10:0]; // stores frozen vals for the column
-
-reg  [15:0] write_addr_u_curr;
-reg  [15:0] write_addr_v_curr;
-reg  [15:0] read_addr_u_curr;
-reg  [15:0] read_addr_v_curr;
-reg         write_en_u_curr;
-reg         write_en_v_curr;
-reg  [17:0] write_data_u_curr;
-reg  [17:0] write_data_v_curr;
-wire [17:0] v_next;
+// outputs from diffusion solver
 wire [17:0] u_next;
-wire [17:0] u_curr;
-wire [17:0] v_curr;
 
+wire is_frozen;
+reg  is_frozen_reg; // stores frozen vals for the row
 
 /*
 neighbor indexing: 
@@ -92,7 +94,7 @@ diffusion_solver solver_inst (
 );
 
 M10K_1000_8 M10k_u_curr ( 
-    .q             (u_curr), 
+    .q             (read_data_u_curr), 
     .d             (write_data_u_curr), 
     .write_address (write_addr_u_curr),
     .read_address  (read_addr_u_curr),
@@ -101,11 +103,11 @@ M10K_1000_8 M10k_u_curr (
 );
 
 M10K_1000_8 M10k_v_next ( // we only store v_next bc v_next = v_curr + gamma, but we never need to store v_curr
-    .q             (v_next), 
-    .d             (write_data_v_curr), 
-    .write_address (write_addr_v_curr),
-    .read_address  (read_addr_v_curr),
-    .we            (write_en_v_curr),
+    .q             (read_data_v_next), 
+    .d             (write_data_v_next), 
+    .write_address (write_addr_v_next),
+    .read_address  (read_addr_v_next),
+    .we            (write_en_v_next),
     .clk           (clk)
 );
 
@@ -172,8 +174,10 @@ always @(posedge clk) begin
                 end
             end
             5'd1: begin
-                
-                write_data_u_curr <= u_next;
+                u_neighbor_1      <= beta; // bottom 
+                u_curr            <= read_data_u_curr; 
+                v_next            <=
+                read_addr_u_curr  <= 
 
             end
             5'd2: begin
