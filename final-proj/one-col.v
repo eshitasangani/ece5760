@@ -46,12 +46,12 @@ wire signed [17:0] read_data_v_next;
 
 reg signed [17:0] v_next;
 reg signed [17:0] u_curr;
-reg signed [17:0] u_neighbor_0;
-reg signed [17:0] u_neighbor_1;
-reg signed [17:0] u_neighbor_2;
-reg signed [17:0] u_neighbor_3;
-reg signed [17:0] u_neighbor_4;
-reg signed [17:0] u_neighbor_5;
+reg signed [17:0] u_neighbor_t;
+reg signed [17:0] u_neighbor_b;
+reg signed [17:0] u_neighbor_l;
+reg signed [17:0] u_neighbor_r;
+reg signed [17:0] u_neighbor_lc;
+reg signed [17:0] u_neighbor_rc;
 
 wire signed [17:0] alpha;
 assign alpha = 18'b01_0000000000000000;
@@ -78,8 +78,8 @@ neighbor indexing:
 */
 
 diffusion_solver solver_inst (
-    .u_neighbor_0 (u_neighbor_0), // top
-    .u_neighbor_1 (u_neighbor_1), // bottom
+    .u_neighbor_0 (u_neighbor_t), // top
+    .u_neighbor_1 (u_neighbor_b), // bottom
     .u_neighbor_2 (beta),         // left
     .u_neighbor_3 (beta),         // right
     .u_neighbor_4 (beta),         // left corner
@@ -144,49 +144,74 @@ always @(posedge clk) begin
                 if (write_addr_u_curr == 16'd3) begin 
                     // on next cycle, it'll be the center node
                     write_data_u_curr; <= 18'd0;
-                    write_data_v_curr <= 18'b01_0000000000000000 + gamma;
+                    write_data_v_next <= 18'b01_0000000000000000 + gamma;
                 end
                 else if (write_addr_u_curr == 16'd2 || write_addr_u_curr == 16'd4) begin
                     // the nodes around the center node are receptive, but not frozen 
                     write_data_u_curr <= 18'd0;
-                    write_data_v_curr <= beta + gamma;
+                    write_data_v_next <= beta + gamma;
                 end
                 else begin
                     // all other nodes are nonreceptive
                     write_data_u_curr <= beta;
-                    write_data_v_curr <= 18'd0;
+                    write_data_v_next <= 18'd0;
                 end
 
                 // MOVE FORWARD OR STOP //
                 if (write_addr_u_curr >= 16'd10) begin
                     state <= 5'd1;
                     write_addr_u_curr <= 16'd0;
-                    write_addr_v_curr <= 16'd0;
+                    write_addr_v_next <= 16'd0;
                     write_en_u_curr <= 1'd0;
-                    write_en_v_curr <= 1'd0;
+                    write_en_v_next <= 1'd0;
                 end
                 else begin
                     state <= 5'd0;
                     write_addr_u_curr <= write_addr_u_curr + 16'd1;
-                    write_addr_v_curr <= write_addr_v_curr + 16'd1;
+                    write_addr_v_next <= write_addr_v_next + 16'd1;
                     write_en_u_curr <= 1'd1;
-                    write_en_v_curr <= 1'd1;
+                    write_en_v_next <= 1'd1;
                 end
             end
+
             5'd1: begin
-                u_neighbor_1      <= beta; // bottom 
-                u_curr            <= read_data_u_curr; 
-                v_next            <=
-                read_addr_u_curr  <= 
+                u_neighbor_b      <= beta; // bottom 
 
+                // read from m10ks for u_curr and v_next for this cell
+                u_curr            <= read_data_u_curr;
+                v_next            <= read_data_v_next;
+                read_addr_u_curr  <= read_addr_u_curr + 16'd1;
+                state             <= 5'd2;
             end
-            5'd2: begin
 
+            5'd2: begin
+                // wait for next read to come back
+                state             <= 5'd3;
             end
             5'd3: begin
+                // read from m10k for top neighbor
+                u_neighbor_t <= read_data_u_curr; 
 
+                // increment these now, so we can read them a cycle earlier
+                read_addr_u_curr <= read_addr_u_curr + 16'd1;
+                read_addr_v_next <= read_addr_v_next + 16'd1;
+
+                state             <= 5'd4;
             end
             5'd4: begin
+                // now we can use diffusion solver output
+                is_frozen_reg <= is_frozen;
+
+                // check if any neighbors are frozen
+                // eventually will have to also check r,l,rc,rl neighbors too but 
+                // right now r,l,rc,rl 
+
+
+                write_en_u_curr <= 1'b1;
+                write_en_v_next <= 1'b1;
+
+                // take a step up
+                u_curr <= u_neighbor_t;
 
             end
             5'd5: begin
