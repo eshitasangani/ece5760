@@ -60,10 +60,12 @@ wire signed [17:0] beta;
 assign beta = 18'b00_0100000000000000;
 
 // outputs from diffusion solver
-wire [17:0] u_next;
+wire [17:0] u_next_top;
+reg  [17:0] u_next_reg; // this will store our current node's output so that we can free up the solver to calculate the diffusion of the cell above us. 
 
 wire is_frozen;
-reg  is_frozen_reg; // stores frozen vals for the row
+reg  is_frozen_reg; // store frozen val for the current node so we can free up solver to calculate diffusion for the node above us.
+reg  is_frozen_bottom; // store frozen val for the cell below us 
 
 /*
 neighbor indexing: 
@@ -77,7 +79,7 @@ neighbor indexing:
         4 1 5
 */
 
-diffusion_solver solver_inst (
+diffusion_solver curr_cell (
     .u_neighbor_0 (u_neighbor_t), // top
     .u_neighbor_1 (u_neighbor_b), // bottom
     .u_neighbor_2 (beta),         // left
@@ -89,7 +91,7 @@ diffusion_solver solver_inst (
     .alpha        (alpha),
     .beta         (beta),
       
-    .u_next       (u_next),
+    .u_next       (u_next_top),
     .is_frozen    (is_frozen)
 );
 
@@ -200,12 +202,11 @@ always @(posedge clk) begin
             end
             5'd4: begin
                 // now we can use diffusion solver output
+                // store these outputs and then move up to calculate diffusion for the cell above us. 
                 is_frozen_reg <= is_frozen;
-
-                // check if any neighbors are frozen
-                // eventually will have to also check r,l,rc,rl neighbors too but 
-                // right now r,l,rc,rl 
-
+                u_next_reg <= u_next_top;
+                // move up 
+                if ()
 
                 write_en_u_curr <= 1'b1;
                 write_en_v_next <= 1'b1;
@@ -215,6 +216,9 @@ always @(posedge clk) begin
 
             end
             5'd5: begin
+                // check if any neighbors are frozen
+                // eventually will have to also check r,l,rc,rl neighbors too but 
+                // right now r,l,rc,rl are edge cells so they are static
 
             end
 
