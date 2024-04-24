@@ -48,10 +48,19 @@ assign beta = 18'b00_0100000000000000;
 
 wire is_frozen;
 reg  is_frozen_reg [10:0]; // stores frozen vals for the column
-wire signed [17:0] u_next;
-reg  signed [17:0] u_curr;
-reg  signed [17:0] v_next;
 
+reg  [15:0] write_addr_u_curr;
+reg  [15:0] write_addr_v_curr;
+reg  [15:0] read_addr_u_curr;
+reg  [15:0] read_addr_v_curr;
+reg         write_en_u_curr;
+reg         write_en_v_curr;
+reg  [17:0] write_data_u_curr;
+reg  [17:0] write_data_v_curr;
+wire [17:0] v_next;
+wire [17:0] u_next;
+wire [17:0] u_curr;
+wire [17:0] v_curr;
 
 
 /*
@@ -84,15 +93,16 @@ diffusion_solver solver_inst (
 
 M10K_1000_8 M10k_u_curr ( 
     .q             (u_curr), 
-    .d             (u_next), 
+    .d             (write_data_u_curr), 
     .write_address (write_addr_u_curr),
     .read_address  (read_addr_u_curr),
     .we            (write_en_u_curr),
     .clk           (clk)
 );
-M10K_1000_8 M10k_v_curr ( 
-    .q             (v_curr), 
-    .d             (v_next), 
+
+M10K_1000_8 M10k_v_next ( // we only store v_next bc v_next = v_curr + gamma, but we never need to store v_curr
+    .q             (v_next), 
+    .d             (write_data_v_curr), 
     .write_address (write_addr_v_curr),
     .read_address  (read_addr_v_curr),
     .we            (write_en_v_curr),
@@ -103,12 +113,83 @@ M10K_1000_8 M10k_v_curr (
 //       STATE MACHINE       //
 // ------------------------- //
 
+// 11 nodes
+
+// reg [15:0] idx;
+
+reg [4:0] state;
+
 always @(posedge clk) begin
     if (reset) begin
-        u_curr <= beta;
+        write_data_u_curr <= beta;
+        write_data_v_curr <= 18'd0;
+        write_addr_u_curr <= 16'd0;
+        write_addr_v_curr <= 16'd0;
+        write_en_u_curr <= 1'd1;
+        write_en_v_curr <= 1'd1;
+
+        read_addr_u_curr <= 16'd0;
+        read_addr_v_curr <= 16'd0;
+
+        state  <= 5'd0;
     end
     else begin
-        u_curr <= u_next;
+        case (state)
+
+            5'd0: begin // initialization
+                // SETTING INITIAL U AND V VALUES //
+                // only center node is frozen, set to 1
+                if (write_addr_u_curr == 16'd3) begin 
+                    // on next cycle, it'll be the center node
+                    write_data_u_curr; <= 18'd0;
+                    write_data_v_curr <= 18'b01_0000000000000000 + gamma;
+                end
+                else if (write_addr_u_curr == 16'd2 || write_addr_u_curr == 16'd4) begin
+                    // the nodes around the center node are receptive, but not frozen 
+                    write_data_u_curr <= 18'd0;
+                    write_data_v_curr <= beta + gamma;
+                end
+                else begin
+                    // all other nodes are nonreceptive
+                    write_data_u_curr <= beta;
+                    write_data_v_curr <= 18'd0;
+                end
+
+                // MOVE FORWARD OR STOP //
+                if (write_addr_u_curr >= 16'd10) begin
+                    state <= 5'd1;
+                    write_addr_u_curr <= 16'd0;
+                    write_addr_v_curr <= 16'd0;
+                    write_en_u_curr <= 1'd0;
+                    write_en_v_curr <= 1'd0;
+                end
+                else begin
+                    state <= 5'd0;
+                    write_addr_u_curr <= write_addr_u_curr + 16'd1;
+                    write_addr_v_curr <= write_addr_v_curr + 16'd1;
+                    write_en_u_curr <= 1'd1;
+                    write_en_v_curr <= 1'd1;
+                end
+            end
+            5'd1: begin
+                
+                write_data_u_curr <= u_next;
+
+            end
+            5'd2: begin
+
+            end
+            5'd3: begin
+
+            end
+            5'd4: begin
+
+            end
+            5'd5: begin
+
+            end
+
+        endcase
     end
 end
 endmodule
@@ -150,7 +231,7 @@ module diffusion_solver (
     signed_mult u_avg_calc ( // divide by 6 (num neighbors) -- mult by 1/6
         .out(u_avg),
         .a  (u_neighbor_0+u_neighbor_1+u_neighbor_2+u_neighbor_3+u_neighbor_4+u_neighbor_5),
-        .b  (18'b00_0010101010101010)
+        .b  (18'b00_0010101010101010) // 1/6
     );
 
     signed_mult laplace_calc ( // alpha / 2 * (u_avg - cell.u)
