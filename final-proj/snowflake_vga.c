@@ -76,10 +76,10 @@ char shared_str[64];
 int i,j,k,x,y;
 
 ///////////////////////////////////////////////// 
-#define WIDTH 51
-#define HEIGHT 51
-#define ALPHA 1
-#define BETA 0.5
+#define WIDTH 101
+#define HEIGHT 101
+#define ALPHA 1.0
+#define BETA 0.8
 #define GAMMA 0.01
 #define NUM_NEIGHBORS 6
 
@@ -96,6 +96,7 @@ Cell cells[WIDTH][HEIGHT];
 float s_vals[WIDTH][HEIGHT]; // Array to store s values for visualization or debugging
 Cell* neighbors[NUM_NEIGHBORS];
 Cell frozen[WIDTH][HEIGHT];
+//int frozen_cells[WIDTH][HEIGHT];
 int num_neighbors;
 // 8-bit color
 #define rgb(r,g,b) ((((r)&7)<<5) | (((g)&7)<<2) | (((b)&3)))
@@ -170,17 +171,17 @@ void initialize_grid() {
         }
     }
     // Set the center cell
-    cells[25][25].s = 1.0;
-    cells[25][25].is_receptive = true;
+    cells[50][50].s = 1.0;
+    cells[50][50].is_receptive = true;
 
-	num_neighbors = get_num_neighbors(neighbors, 25, 25);
+	// num_neighbors = get_num_neighbors(neighbors, 25, 25);
 
-	for (k = 0; k < num_neighbors; k++) {
-		neighbors[k]->is_receptive = true;
-		// printf("%.2f", neighbors[k]->s);
-		// printf("s value");
-		// printf("\n");
-	}
+	// for (k = 0; k < num_neighbors; k++) {
+	// 	neighbors[k]->is_receptive = true;
+	// 	// printf("%.2f", neighbors[k]->s);
+	// 	// printf("s value");
+	// 	// printf("\n");
+	// }
 
 }
 
@@ -216,7 +217,7 @@ void one_iter() {
             if (cells[i][j].is_receptive) {
                 cells[i][j].u = 0;
                 cells[i][j].v = cells[i][j].s;
-                cells[i][j].next_v = cells[i][j].v + GAMMA;
+                cells[i][j].next_v = cells[i][j].s + GAMMA;
             } 
 			else {
                 cells[i][j].u = cells[i][j].s;
@@ -229,9 +230,9 @@ void one_iter() {
 	for (i = 0; i < WIDTH; i++) {
 		for (j = 0; j < HEIGHT; j++) {
 
-			if (i ==0 || i == WIDTH-1 || j == 0 || j == HEIGHT-1) { // for edge cells
-				cells[i][j].next_u = BETA;
-				cells[i][j].next_v = 0;
+			if (i == 0 || i == WIDTH-1 || j == 0 || j == HEIGHT-1) { // for edge cells
+				cells[i][j].u = BETA;
+				cells[i][j].v = 0;
 			}
 
 			else { // everything else
@@ -288,18 +289,19 @@ void one_iter() {
 						// printf("s value");
 						// printf("\n");
 
-						// neighbors[k]->is_receptive = true;
+						// neighbors[k]->is_receptive = true; // this should already be true
 
-						cells[i][j].is_receptive = true;
+						cells[i][j].is_receptive = true; // one of the neighbors is frozen, so we mark this cell as receptive
 					} 
 					// break;					
 				}
+				// break;
 
 			}
 
 		}
 	}
-	// update_s_vals();
+	//update_s_vals();
 
  }
 
@@ -310,14 +312,17 @@ void run_snow() {
 	
 	for (i = 0; i < WIDTH; i++) { 
 		for (j = 0; j < HEIGHT; j++){
+			// if (s_vals[i][j] >= 1) {
+			// 	frozen_cells[i][j] = 1;
+			// }
 
-			color = cells[i][j].s >=1 ? rgb(7,7,7) : rgb(0,0,0); 
+			color = cells[i][j].s >= 1 ? rgb(7,7,7) : rgb(0,0,0); 
 
 			// for (x = 0; x < 320; x++) { // column number (x)
 			// 	for (y = 0; y < 240; y++ ) {  // row number (y)
 					// inside vga now 
 
-					// if even column 
+			// if even column 
 			if (i % 2 == 0) { 
 				VGA_box(2*i, 2*j, 2*i + 2, 2*j + 2,  color);
 
@@ -331,6 +336,20 @@ void run_snow() {
 
 		}
 	}
+	// for (i = 0; i < WIDTH; i++) {
+	// 	for (j = 0; j < HEIGHT; j++) {
+
+	// 		color = frozen_cells[i][j] == 1 ? rgb(7,7,7) : rgb(0,0,0); 
+	// 		// if even column 
+	// 		if (i % 2 == 0) { 
+	// 			VGA_box(2*i, 2*j, 2*i + 2, 2*j + 2,  color);
+
+	// 		}
+	// 		else { 
+	// 			VGA_box(2*i, 2*j + 1, 2*i + 2, 2*j + 3,  color);
+	// 		}
+	// 	}
+	// }
 }
 
 void draw_VGA_test(){
@@ -419,7 +438,7 @@ int main(void)
 	//VGA_text (34, 1, text_top_row);
 	//VGA_text (34, 2, text_bottom_row);
 	// clear the screen
-	// VGA_box (0, 0, 639, 479, 0x1c);
+	VGA_box (0, 0, 639, 479, 0x1c);
 	// VGA_box (0, 0, 639, 479, 0x1a);
 	initialize_grid();
 
@@ -428,14 +447,16 @@ int main(void)
 	// 	// for (x = 0; x < 25; x++) { 
 		one_iter();
 	// 	sleep(1);
-		update_s_vals();
+	//	update_s_vals();
 		// print_s_vals();
 		run_snow();
+	
 	}
+	// draw_VGA_test();
 		
 
 	// }
-	draw_VGA_test();
+	
 	
 
 	// update_s_vals();
