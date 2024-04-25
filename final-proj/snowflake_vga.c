@@ -36,7 +36,7 @@ void VGA_text_clear();
 void VGA_box (int, int, int, int, short);
 void VGA_line(int, int, int, int, short) ;
 void VGA_disc (int, int, int, short);
-
+void VGA_cell (int, int, int, int, short);
 // fixed pt
 typedef signed int fix28 ;
 //multiply two fixed 4:28
@@ -76,8 +76,8 @@ char shared_str[64];
 int i,j,k,x,y;
 
 ///////////////////////////////////////////////// 
-#define WIDTH 101
-#define HEIGHT 101
+#define WIDTH 201
+#define HEIGHT 201
 #define ALPHA 1.0
 #define BETA 0.8
 #define GAMMA 0.01
@@ -171,8 +171,8 @@ void initialize_grid() {
         }
     }
     // Set the center cell
-    cells[50][50].s = 1.0;
-    cells[50][50].is_receptive = true;
+    cells[(WIDTH -1 ) / 2 ][(HEIGHT -1 ) / 2].s = 1.0;
+    cells[(WIDTH -1 ) / 2][(HEIGHT -1 ) / 2].is_receptive = true;
 
 	// num_neighbors = get_num_neighbors(neighbors, 25, 25);
 
@@ -325,6 +325,20 @@ void run_snow() {
 			// if even column 
 			if (i % 2 == 0) { 
 				VGA_box(2*i, 2*j, 2*i + 2, 2*j + 2,  color);
+				// float b = 2*i;
+				// float c = 2*j;
+				// float d = 2*i+2;
+				// float e = 2*j+2;
+
+				// printf("%.2f", b);
+				// printf(" ");
+
+				// printf("%.2f", c);
+				// printf(" ");
+				// printf("%.2f", d);
+				// printf(" ");
+				// printf("%.2f", e);
+				// printf("\n");
 
 			}
 			else { 
@@ -442,9 +456,9 @@ int main(void)
 	// VGA_box (0, 0, 639, 479, 0x1a);
 	initialize_grid();
 
-	while (1) { 
+	// while (1) { 
 
-	// 	// for (x = 0; x < 25; x++) { 
+	for (x = 0; x < 145; x++) { 
 		one_iter();
 	// 	sleep(1);
 	//	update_s_vals();
@@ -452,6 +466,8 @@ int main(void)
 		run_snow();
 	
 	}
+
+	// VGA_cell(2*4, 2*4, 2*4 + 2, 2*4 + 2,  0x00);
 	// draw_VGA_test();
 		
 
@@ -472,6 +488,26 @@ int main(void)
     
 	//} // end while(1)
 } // end main
+
+
+void VGA_cell(int x1, int y1, int x2, int y2, short pixel_color)
+{
+
+
+	VGA_PIXEL(x1,y1,pixel_color);
+	VGA_PIXEL(x1,y2,pixel_color);
+	VGA_PIXEL(x2,y1,pixel_color);
+	VGA_PIXEL(x2,y2,pixel_color);
+
+
+}
+
+
+
+
+
+
+
 
 /****************************************************************************************
  * Subroutine to send a string of text to the VGA monitor 
