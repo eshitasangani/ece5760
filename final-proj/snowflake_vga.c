@@ -36,7 +36,7 @@ void VGA_text_clear();
 void VGA_box (int, int, int, int, short);
 void VGA_line(int, int, int, int, short) ;
 void VGA_disc (int, int, int, short);
-
+void VGA_cell (int, int, int, int, short);
 // fixed pt
 typedef signed int fix28 ;
 //multiply two fixed 4:28
@@ -73,12 +73,12 @@ int shared_note;
 char shared_str[64];
 
 // loop identifiers
-int i,j,k;
+int i,j,k,x,y;
 
 ///////////////////////////////////////////////// 
-#define WIDTH 51
-#define HEIGHT 51
-#define ALPHA 1
+#define WIDTH 201
+#define HEIGHT 201
+#define ALPHA 1.0
 #define BETA 0.8
 #define GAMMA 0.01
 #define NUM_NEIGHBORS 6
@@ -87,13 +87,17 @@ typedef struct {
     float u;   // water used in diffusion
     float v;   // water not used in diffusion
     float s;   // total water
+	float next_u; // water used next step 
+	float next_v; // water not used next step 
     bool is_receptive;
 } Cell;
 
 Cell cells[WIDTH][HEIGHT];
 float s_vals[WIDTH][HEIGHT]; // Array to store s values for visualization or debugging
-
-
+Cell* neighbors[NUM_NEIGHBORS];
+Cell frozen[WIDTH][HEIGHT];
+//int frozen_cells[WIDTH][HEIGHT];
+int num_neighbors;
 // 8-bit color
 #define rgb(r,g,b) ((((r)&7)<<5) | (((g)&7)<<2) | (((b)&3)))
 
@@ -104,30 +108,56 @@ float s_vals[WIDTH][HEIGHT]; // Array to store s values for visualization or deb
 	*(char *)pixel_ptr = (color);\
 } while(0)
 
+
 // Get neighbors for a specific coordinate
-int get_neighbors(Cell* neighbors[], int x, int y) {
+int get_num_neighbors(Cell* neighbors[], int x, int y) {
+	// SET EDGE CELLS TO BE STATIC ??
     int count = 0;
- 
-    // Check left neighbor
-    if (x > 0) {
-        neighbors[count++] = &cells[x-1][y]; // Direct left
-        if (y > 0) neighbors[count++] = &cells[x-1][y-1]; // Top-left
-        if (y < HEIGHT - 1) neighbors[count++] = &cells[x-1][y+1]; // Bottom-left
-    }
 
-    // Check right neighbor
-    if (x < WIDTH - 1) {
-        neighbors[count++] = &cells[x+1][y]; // Direct right
-        if (y > 0) neighbors[count++] = &cells[x+1][y-1]; // Top-right
-        if (y < HEIGHT - 1) neighbors[count++] = &cells[x+1][y+1]; // Bottom-right
-    }
+	if (y != 0) { // top neighbor, does not rely on if the column is even or odd
+		neighbors[count++] = &cells[x][y-1];
+	}
+	if (y != HEIGHT-1) { // bottom  neighbor, does not rely on if the column is even or odd
+		neighbors[count++] = &cells[x][y+1];
+	}
+	
+	if (x % 2 == 0) { // even columns
+		if (x != 0) { // left side neighbors, the 0th column does not have left side neighbors
+			neighbors[count++] = &cells[x-1][y];
+			if (y != 0) { // only top left if y not 0
+				neighbors[count++] = &cells[x-1][y-1];
+			}
+		}
+		if (x != WIDTH-1) { // right side neighbors
+			neighbors[count++] = &cells[x+1][y];
+			if (y != 0) { // only top right if y not 0
+				neighbors[count++] = &cells[x+1][y-1];
+			}
+		}
+		
+	}
+	if (x % 2 == 1){ // odd columns
+		// odd numbered columns always have left side neighbors
+		neighbors[count++] = &cells[x-1][y];
+		if (y != HEIGHT-1) { // only bottom left if y not at bottom
+			neighbors[count++] = &cells[x-1][y+1];
+		}
 
-    // Check top and bottom neighbors
-    if (y > 0) neighbors[count++] = &cells[x][y-1]; // Direct top
-    if (y < HEIGHT - 1) neighbors[count++] = &cells[x][y+1]; // Direct bottom
+		if (x != WIDTH-1) { // right side neighbors
+			neighbors[count++] = &cells[x+1][y];
+			if (y != HEIGHT-1) { // only bottom right if y not height-1
+				neighbors[count++] = &cells[x+1][y+1];
+			}
+		}
+	}
 
     return count;
 }
+
+// // "length" is the length of the array.   
+// #define each(item, array, length) \
+// (typeof(*(array)) *p = (array), (item) = *p; p < &((array)[length]); p++, (item) = *p)
+
 
 void initialize_grid() {
     for ( i = 0; i < WIDTH; i++) {
@@ -135,12 +165,24 @@ void initialize_grid() {
             cells[i][j].s = BETA;
             cells[i][j].is_receptive = false;
             cells[i][j].u = 0;
+			cells[i][j].next_u = 0;
+			cells[i][j].next_v = 0;
             cells[i][j].v = 0;
         }
     }
     // Set the center cell
-    cells[WIDTH/2][HEIGHT/2].s = 1.0;
-    cells[WIDTH/2][HEIGHT/2].is_receptive = true;
+    cells[(WIDTH -1 ) / 2 ][(HEIGHT -1 ) / 2].s = 1.0;
+    cells[(WIDTH -1 ) / 2][(HEIGHT -1 ) / 2].is_receptive = true;
+
+	// num_neighbors = get_num_neighbors(neighbors, 25, 25);
+
+	// for (k = 0; k < num_neighbors; k++) {
+	// 	neighbors[k]->is_receptive = true;
+	// 	// printf("%.2f", neighbors[k]->s);
+	// 	// printf("s value");
+	// 	// printf("\n");
+	// }
+
 }
 
 void update_s_vals() {
@@ -154,60 +196,174 @@ void update_s_vals() {
 void print_s_vals() {
     for (i = 0; i < WIDTH; i++) {
         for (j = 0; j < HEIGHT; j++) {
-            printf("%.2f ", s_vals[i][j]);
+            printf("%.2f ", cells[i][j].s);
         }
         printf("\n");
     }
     printf("\n");
 }
 
-void one_iter() {
-    Cell* neighbors[NUM_NEIGHBORS];
-    int num_neighbors;
 
-    // Determine receptive sites
+float u_avg = 0.0;
+float sum_u = 0.0;
+short color; 
+
+void one_iter() {
+
+    // step 1: determine receptive sites
     for ( i = 0; i < WIDTH; i++) {
         for ( j = 0; j < HEIGHT; j++) {
+
             if (cells[i][j].is_receptive) {
                 cells[i][j].u = 0;
                 cells[i][j].v = cells[i][j].s;
-                cells[i][j].s = cells[i][j].v + GAMMA;
-            } else {
+                cells[i][j].next_v = cells[i][j].s + GAMMA;
+            } 
+			else {
                 cells[i][j].u = cells[i][j].s;
                 cells[i][j].v = 0;
             }
         }
     }
 
-    // Diffusion process
-    for (i = 0; i < WIDTH; i++) {
-        for (j = 0; j < HEIGHT; j++) {
-            num_neighbors = get_neighbors(neighbors, i, j);
-            float sum_u = 0;
+    // step 2: modify cell values == doing actual diffusion
+	for (i = 0; i < WIDTH; i++) {
+		for (j = 0; j < HEIGHT; j++) {
 
-            for (k = 0; k < num_neighbors; k++) {
-                sum_u += neighbors[k]->u;
-            }
-            float u_avg = sum_u / num_neighbors;
-            cells[i][j].u += ALPHA / 2 * (u_avg - cells[i][j].u);
-            cells[i][j].s = cells[i][j].u + cells[i][j].v;
+			if (i == 0 || i == WIDTH-1 || j == 0 || j == HEIGHT-1) { // for edge cells
+				cells[i][j].u = BETA;
+				cells[i][j].v = 0;
+			}
 
-            // Update receptiveness based on the new s
-            if (cells[i][j].s >= 1) {
-                cells[i][j].is_receptive = true;
-            } else {
+			else { // everything else
+				num_neighbors = get_num_neighbors(neighbors, i, j); // get num neighbors @ specific coord + modify neighbors
+
+				// if (num_neighbors > 0) { // make sure there are neighbors so we can avoid division bt 0
+					sum_u = 0;
+
+					for (k = 0; k < num_neighbors; k++) {
+						sum_u += neighbors[k]->u; // Sum u values of all neighbors
+					}
+
+					u_avg = sum_u / num_neighbors; // Calculate average u
+					
+					cells[i][j].next_u = cells[i][j].u + (ALPHA / 2 * (u_avg - cells[i][j].u)); // update u based on diffusion eq 
+					// printf("%.2f ", cells[i][j].next_u);
+					// update the cell
+					cells[i][j].s = cells[i][j].next_u + cells[i][j].next_v; 
+
+					// Update receptiveness based on the new sp
+					if (cells[i][j].s >= 1) {
+						cells[i][j].is_receptive = true;
+					}
+					// 	//neighbors[k]->is_receptive = true;
+					// 	for (k = 0; k < num_neighbors; k++) {
+					// 		neighbors[k]->is_receptive = true;
+					// 		// printf("%.2f", neighbors[k]->s);
+					// 		// printf("s value");
+					// 		// printf("\n");
+
+					// 	}
+					// } 
+			}
+
+			// } 
+			// end of if statment checking to make sure if we have neighbors or not 
+			// else { // if cell has no neighbors, just make it so that it is not receptive
+			// 	cells[i][j].is_receptive = false;
+			// }
+		}
+	}
+
+	// step 3: all s values must be updated to determine new boundary 
+	for (i = 0; i < WIDTH; i++) { 
+		for (j = 0; j < HEIGHT; j++) { 
+			if (!cells[i][j].is_receptive) {
+				num_neighbors = get_num_neighbors(neighbors, i, j); 
+				// printf("%d", num_neighbors);
 				
-                bool any_frozen = false;
-                for ( k = 0; k < num_neighbors; k++) {
-                    if (neighbors[k]->s >= 1) {
-                        any_frozen = true;
-                        break;
-                    }
-                }
-                cells[i][j].is_receptive = any_frozen;
-            }
-        }
-    }
+				for (k = 0; k < num_neighbors; k++) {
+					if (neighbors[k]->s >= 1) { 
+
+						// printf("%.2f", neighbors[k]->s);
+						// printf("s value");
+						// printf("\n");
+
+						// neighbors[k]->is_receptive = true; // this should already be true
+
+						cells[i][j].is_receptive = true; // one of the neighbors is frozen, so we mark this cell as receptive
+					} 
+					// break;					
+				}
+				// break;
+
+			}
+
+		}
+	}
+	//update_s_vals();
+
+ }
+
+
+
+void run_snow() {
+	// this runs snowflake gen for 1 iteration + updates the cells 
+	
+	for (i = 0; i < WIDTH; i++) { 
+		for (j = 0; j < HEIGHT; j++){
+			// if (s_vals[i][j] >= 1) {
+			// 	frozen_cells[i][j] = 1;
+			// }
+
+			color = cells[i][j].s >= 1 ? rgb(7,7,7) : rgb(0,0,0); 
+
+			// for (x = 0; x < 320; x++) { // column number (x)
+			// 	for (y = 0; y < 240; y++ ) {  // row number (y)
+					// inside vga now 
+
+			// if even column 
+			if (i % 2 == 0) { 
+				VGA_box(2*i, 2*j, 2*i + 2, 2*j + 2,  color);
+				// float b = 2*i;
+				// float c = 2*j;
+				// float d = 2*i+2;
+				// float e = 2*j+2;
+
+				// printf("%.2f", b);
+				// printf(" ");
+
+				// printf("%.2f", c);
+				// printf(" ");
+				// printf("%.2f", d);
+				// printf(" ");
+				// printf("%.2f", e);
+				// printf("\n");
+
+			}
+			else { 
+				VGA_box(2*i, 2*j + 1, 2*i + 2, 2*j + 3,  color);
+			}
+					 
+			// 	}
+			// }
+
+		}
+	}
+	// for (i = 0; i < WIDTH; i++) {
+	// 	for (j = 0; j < HEIGHT; j++) {
+
+	// 		color = frozen_cells[i][j] == 1 ? rgb(7,7,7) : rgb(0,0,0); 
+	// 		// if even column 
+	// 		if (i % 2 == 0) { 
+	// 			VGA_box(2*i, 2*j, 2*i + 2, 2*j + 2,  color);
+
+	// 		}
+	// 		else { 
+	// 			VGA_box(2*i, 2*j + 1, 2*i + 2, 2*j + 3,  color);
+	// 		}
+	// 	}
+	// }
 }
 
 void draw_VGA_test(){
@@ -224,101 +380,6 @@ void draw_VGA_test(){
 			}
 		}
 	}
-}
-
-// need to map the # of neighbors to the columns on the vga 
-
-// void run_snow() {
-// 	// this runs snowflake gen for 1 iteration + updates the cells 
-// 	// one_iter();
-// 	// update s array
-// 	// update_s_vals();
-
-// 	for (i = 0; i < WIDTH; i++) { 
-// 		for (j = 0; j < HEIGHT; j++){
-// 			if (s_vals[i][j] >= 1 ) { 
-// 				// means it is frozen 
-// 				color = 0x1d;
-// 				// VGA_box(i-1, j-1, i+1, j+1, 0x1d);
-// 			}
-// 			else { 
-// 				color = 0x1c;
-// 				// VGA_box(i, j, i-1, j-1, 0x1b);
-// 			}
-
-// 			// draw even // odd columns 
-// 		}
-// 	}
-
-// 	// now actually draw on the vga 
-// 	for (i = 1; i < 640; i++) {  // column number (x)
-// 		for (j = 1; j < 480; j++ ) { // row number (y)
-// 			// void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
-// 			if (j % 2 == 0) {
-// 				// VGA_PIXEL(2*i, 2*(j-1), 2*(i+2), 2*(j-3), 0x1d);
-// 				VGA_box(i-1, j-1, i+1, j+1, color);
-// 			}  
-// 			else{
-// 				VGA_box(i, j, i-1, j-1, color);
-// 			}
-// 		}
-// 	}
-
-// }
-
-// Define the size of a square cell in pixels
-#define CELL_SIZE 8
-
-void draw_snowflakes() {
-    one_iter(); // update the states
-
-    for (int i = 0; i < WIDTH; i++) {
-        for (int j = 0; j < HEIGHT; j++) {
-            // top-left corner of the square for this cell
-            int x = i * CELL_SIZE;
-            int y = j * CELL_SIZE;
-
-            // If odd row, add half the cell width to x
-            if (j % 2 != 0) {
-                x += CELL_SIZE / 2;
-            }
-
-            // determine the color based on whether the cell is frozen
-			// white for frozen, black otherwise
-            short color = cells[i][j].is_receptive ? rgb(3, 3, 3) : rgb(0, 0, 0); 
-
-			// draw onto the vga 
-            VGA_box(x, y, x + CELL_SIZE - 1, y + CELL_SIZE - 1, color);
-        }
-    }
-}
-
-
-/// even odd columbs based on the neighbors
-// loops through the s values
-void run_snow() {
-    one_iter(); 
-    update_s_vals();  // Update s values for drawing
-
-    // Loop through s_vals to draw each cell on the VGA screen
-    for (int i = 0; i < WIDTH; i++) {
-        for (int j = 0; j < HEIGHT; j++) {
-            int x1 = i * 2;  // X start pixel
-            int y1 = j * 2;  // Y start pixel
-
-            // Adjust for odd columns
-            if (j % 2 == 1) {
-                y1++;
-            }
-
-            // Set the color based on the cell's state
-			// frozen cells are white and others are black 
-            short color = (s_vals[i][j] >= 1) ? rgb(3, 3, 3) : rgb(0, 0, 0);
-
-            // Draw the cell as a 2x2 pixel square
-            VGA_box(x1, y1, x1 + 1, y1 + 1, color);
-        }
-    }
 }
 
 
@@ -391,28 +452,53 @@ int main(void)
 	//VGA_text (34, 1, text_top_row);
 	//VGA_text (34, 2, text_bottom_row);
 	// clear the screen
-	// VGA_box (0, 0, 639, 479, 0x1c);
-	// VGA_box (0, 0, 639, 479, 0x1d);
+	VGA_box (0, 0, 639, 479, 0x1c);
+	// VGA_box (0, 0, 639, 479, 0x1a);
+	initialize_grid();
 
-	initialize_grid();  // Initialize the simulation grid
+	// while (1) { 
 
-	while (true) {
-        draw_snowflakes();  // Run simulation and update display
-        usleep(100000);  // Update every 100 ms or adjust according to desired simulation speed
-    }
+	for (x = 0; x < 145; x++) { 
+		one_iter();
+	// 	sleep(1);
+	//	update_s_vals();
+		// print_s_vals();
+		run_snow();
+	
+	}
 
+	// VGA_cell(2*4, 2*4, 2*4 + 2, 2*4 + 2,  0x00);
+	// draw_VGA_test();
+		
 
-	// run_snow();
+	// }
+	
+	
+
+	// update_s_vals();
+	// print_u_vals();
+	// printf("%f", cells[25][25].u);
+	// printf("%f", cells[25][25].v);
+	// printf("%f", cells[25][25].s);
 	// clear the text
 	// VGA_text_clear();
 
     // VGA_text (10, 1, text_top_row);
     // VGA_text (10, 2, text_bottom_row);
-
-
     
 	//} // end while(1)
 } // end main
+
+
+void VGA_cell(int x1, int y1, int x2, int y2, short pixel_color)
+{
+	VGA_PIXEL(x1,y1,pixel_color);
+	VGA_PIXEL(x1,y2,pixel_color);
+	VGA_PIXEL(x2,y1,pixel_color);
+	VGA_PIXEL(x2,y2,pixel_color);
+
+}
+
 
 /****************************************************************************************
  * Subroutine to send a string of text to the VGA monitor 
