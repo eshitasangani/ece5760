@@ -45,6 +45,7 @@ wire signed [17:0] read_data_v_next;
 // inputs to diffusion solver
 
 reg signed [17:0] v_next;
+reg signed [17:0] v_next_reg; // store curr node v_next so we can free solver to calc diffuion of cell above us
 reg signed [17:0] u_curr;
 reg signed [17:0] u_neighbor_t;
 reg signed [17:0] u_neighbor_b;
@@ -60,8 +61,8 @@ wire signed [17:0] beta;
 assign beta = 18'b00_0100000000000000;
 
 // outputs from diffusion solver
-wire [17:0] u_next_top;
-reg  [17:0] u_next_reg; // this will store our current node's output so that we can free up the solver to calculate the diffusion of the cell above us. 
+wire signed [17:0] u_next_top;
+reg  signed [17:0] u_next_reg; // this will store our current node's output so that we can free up the solver to calculate the diffusion of the cell above us. 
 
 wire is_frozen;
 reg  is_frozen_reg; // store frozen val for the current node so we can free up solver to calculate diffusion for the node above us.
@@ -204,22 +205,90 @@ always @(posedge clk) begin
                 // now we can use diffusion solver output
                 // store these outputs and then move up to calculate diffusion for the cell above us. 
                 is_frozen_reg <= is_frozen;
-                u_next_reg <= u_next_top;
-                // move up 
-                if ()
+                u_next_reg <= u_next_top; // u_next_top is solver output
+                v_next_reg <= v_next;                
+
+                // take a step up
+                u_neighbor_b <= u_curr;
+                u_curr <= u_neighbor_t;
+                
+
+            end
+            5'd5: begin // read m10k for the cell above us so we can calc diffusion for it
+                // read from m10k for top neighbor
+                u_neighbor_t <= read_data_u_curr; 
+
+                // read from m10k for v_next
+                v_next            <= read_data_v_next;
+
+                // increment these now, so we can read them a cycle earlier
+                read_addr_u_curr <= read_addr_u_curr + 16'd1;
+                read_addr_v_next <= read_addr_v_next + 16'd1;
+
+                state             <= 5'd6;
+
+            end
+            5'd6: begin
+                // check if any neighbors are frozen
+                // eventually will have to also check r,l,rc,rl neighbors too but 
+                // right now r,l,rc,rl are edge cells so they are static
+                if (is_frozen_reg || is_frozen_bottom || is_frozen) begin
+                    // if we or any neighbors are frozen, we are a receptive cell.
+                    // write the new s=u+v value to v, write 0 to u
+                    write_data_v_next <= v_next_reg + u_next_reg;
+                    write_data_u_curr <= 18'd0;
+                end
+                else begin
+                    // if us and none of our neighbors are frozen, we are a non-receptive cell
+                    // write 0 to v, write the new s=u+v value to u
+                    write_data_v_next <= 18'd0;
+                    write_data_u_curr <= v_next_reg + u_next_reg;
+                end
 
                 write_en_u_curr <= 1'b1;
                 write_en_v_next <= 1'b1;
 
-                // take a step up
-                u_curr <= u_neighbor_t;
+                // move up one cell!
+                u_neighbor_b <= u_curr;
+                u_curr       <= u_neighbor_t;
 
+                is_frozen_bottom <= is_frozen_reg;
+                is_frozen_reg    <= is_frozen;
+
+                u_next_reg <= u_next;
+                v_next_reg <= v_next;
+
+                state <= 5'd7;
             end
-            5'd5: begin
-                // check if any neighbors are frozen
-                // eventually will have to also check r,l,rc,rl neighbors too but 
-                // right now r,l,rc,rl are edge cells so they are static
+            5'd7: begin
+                // read from m10k for top neighbor
+                u_neighbor_t <= (read_addr_u_curr >= 16'd10) ? beta : read_data_u_curr; // consider top edge boundary
 
+                // read from m10k for v_next
+                v_next <= (read_addr_v_next >= 16'd10) ? 18'd0 : read_data_v_next; // consider top edge boundary
+
+                // increment these now, so we can read them a cycle earlier
+                // consider top edge boundary: make sure we're not trying to read nonexistent data from m10ks
+                read_addr_u_curr  <= (read_addr_u_curr >= 16'd10) ? read_addr_u_curr : (read_addr_u_curr + 16'd1);
+                read_addr_v_next  <= (read_addr_v_next >= 16'd10) ? read_addr_v_next : (read_addr_v_next + 16'd1);
+
+                // incr write addresses
+                if (write_addr_u_curr >= 16'd10) begin
+                    write_addr_u_curr <= 16'd0;
+                    write_addr_v_next <= 16'd0;
+                    state             <= 5'd8;
+                end
+                else begin
+                    write_addr_u_curr <= write_addr_u_curr + 16'd1;
+                    write_addr_v_next <= write_addr_v_next + 16'd1;
+                    state             <= 5'd6;
+                end
+                write_en_u_curr <= 1'b0;
+                write_en_v_next <= 1'b0;
+            end
+
+            5'd8: begin // this is a wait state so we can get our read data at the bottom in state 1 
+                state <= 5'd1;
             end
 
         endcase
