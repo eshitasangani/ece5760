@@ -39,9 +39,10 @@ pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define PIO_ALPHA_BASE      0x100
 #define PIO_BETA_BASE       0x110
 #define PIO_GAMMA_BASE      0x120
-#define PIO_RESET_BASE      0x130
+#define PIO_RESET_FROM_BASE  0x130
 #define PIO_IS_FROZEN_BASE  0x140
 #define PIO_FROZEN_Y_BASE   0x150
+#define PIO_RESET_TO_BASE   0x160
 
 // =============================== FPGA ============================
 volatile unsigned int *pio_alpha_addr       = NULL;
@@ -51,6 +52,8 @@ volatile unsigned int *pio_reset_addr       = NULL;
 volatile unsigned int *pio_is_frozen_addr       = NULL;
 // volatile unsigned int *pio_frozen_x_addr    = NULL;
 volatile unsigned int *pio_frozen_y_addr    = NULL;
+volatile unsigned int *pio_reset_to_addr    = NULL;
+
 
 // fix18 frozen_x;
 // fix18 frozen_y;
@@ -74,16 +77,16 @@ void VGA_cell (int, int, int, int, short);
 
 // MACROS FOR FIXED POINT CONVERSION // 
 typedef signed int fix18 ;
-#define multfix18(a,b) ((fix18)(((( signed long long)(a))*(( signed long long)(b)))>>18)) 
+#define mult2fix18(a,b) ((fix18)(((( signed long long)(a))*(( signed long long)(b)))>>18)) 
 #define float2fix18(a) ((fix18)((a)*262144.0f)) // 2^18
 #define fix2float18(a) ((float)(a)/262144.0f) 
 #define int2fix28(a) ((a)<<18);
 
 // pixel macro
 #define VGA_PIXEL(x,y,color) do{\
-	char  *pixel_ptr ;\
-	pixel_ptr = (char *)vga_pixel_ptr + ((y)<<10) + (x) ;\
-	*(char *)pixel_ptr = (color);\
+    char  *pixel_ptr ;\
+    pixel_ptr = (char *)vga_pixel_ptr + ((y)<<10) + (x) ;\
+    *(char *)pixel_ptr = (color);\
 } while(0)
 
 // 16-bit primary colors
@@ -100,7 +103,7 @@ typedef signed int fix18 ;
 #define gray (15+(31<<5)+(51<<11))
 #define white (0xffff)
 int colors[] = {red, dark_red, green, dark_green, blue, dark_blue, 
-		yellow, cyan, magenta, gray, black, white};
+        yellow, cyan, magenta, gray, black, white};
 
 // the light weight buss base
 void *h2p_lw_virtual_base;
@@ -148,6 +151,29 @@ int set = 0;
 short color;
 
 ///////////////////////////////////////////////////////////////
+// for debug  // 
+///////////////////////////////////////////////////////////////
+#include <stdio.h>
+
+void print_buffer() {
+    pthread_mutex_lock(&buffer_mutex);  // Lock the buffer for safe access
+
+    printf("buffer content:\n");
+    for (int i = 0; i < buffer_index; ++i) {  // Only iterate up to the current buffer index
+        printf("idx %d: is_frozen = %d, frozen_y = %d\n", i, buffer[i].is_frozen, buffer[i].frozen_y);
+    }
+
+    pthread_mutex_unlock(&buffer_mutex);  // Unlock the buffer after done reading
+}
+
+void * debug_thread() {
+    while (1) {
+        print_buffer();
+        sleep(1);  // Print the buffer contents every second
+    }
+}
+
+///////////////////////////////////////////////////////////////
 // reset thread  // 
 ///////////////////////////////////////////////////////////////
 
@@ -155,23 +181,23 @@ void * reset_thread() {
 
   while (1) {
   
-    // if (init_reset) {
+    if (*pio_reset_to_addr) {
     
-		// update pio pointers w the initial values 
-		*(pio_alpha_addr) = float2fix(temp_alpha);
-		*(pio_beta_addr)  = float2fix(temp_beta);
-		*(pio_gamma_addr) = float2fix(temp_gamma);
-		
-		// do the actual reset
-		*pio_reset_addr = 1;
-		*pio_reset_addr = 0;
+        // update pio pointers w the initial values 
+        *(pio_alpha_addr) = float2fix18(temp_alpha);
+        *(pio_beta_addr)  = float2fix18(temp_beta);
+        *(pio_gamma_addr) = float2fix18(temp_gamma);
+        
+        // do the actual reset
+        // *pio_reset_from_addr = 1;
+        // *pio_reset_addr = 0;
      
       // clear VGA screen 
       VGA_box (0, 0, 639, 479, 0x0000);
       
       // done initializing
     //   init_reset = 0;
-    // }
+    }
   }
 }
 
@@ -180,37 +206,34 @@ void * reset_thread() {
 ///////////////////////////////////////////////////////////////
 void * scan_thread () { 
 
-	while (1) { 
-		printf("1: alpha, 2: beta 3. gamma \n");
-		scanf("%i", &set);
+    while (1) { 
+        printf("1: alpha, 2: beta 3. gamma \n");
+        scanf("%i", &set);
 
-		switch (set) {
-			case 1: 
-				printf("enter alpha: ");
-				scanf("%f", &temp_alpha);
-				*pio_alpha_addr = float2fix(temp_alpha);
-				*pio_reset_addr = 1;
-				*pio_reset_addr = 0;
-				break;
+        switch (set) {
+            case 1: 
+                printf("enter alpha: ");
+                scanf("%f", &temp_alpha);
+                *pio_alpha_addr = float2fix18(temp_alpha);
+
+                break;
 
             case 2: 
-				printf("enter beta: ");
-				scanf("%f", &temp_beta);
-				*pio_beta_addr = float2fix(temp_beta);
-				*pio_reset_addr = 1;
-				*pio_reset_addr = 0;
-				break;
+                printf("enter beta: ");
+                scanf("%f", &temp_beta);
+                *pio_beta_addr = float2fix18(temp_beta);
+
+                break;
 
             case 3: 
-				printf("enter gamma: ");
-				scanf("%f", &temp_gamma);
-				*pio_gamma_addr = float2fix(temp_gamma);
-				*pio_reset_addr = 1;
-				*pio_reset_addr = 0;
-				break;
+                printf("enter gamma: ");
+                scanf("%f", &temp_gamma);
+                *pio_gamma_addr = float2fix18(temp_gamma);
+    
+                break;
 
-		}
-	}
+        }
+    }
 }
 
 
@@ -222,7 +245,7 @@ void * scan_thread () {
 
 void * frozen_thread () { 
 
-	while (1) { 
+    while (1) { 
 
         // read values from the FPGA 
         int y       = *pio_frozen_y_addr;
@@ -242,7 +265,7 @@ void * frozen_thread () {
         }
         pthread_mutex_unlock(&buffer_mutex);
 
-	}
+    }
 
 }
 
@@ -254,23 +277,23 @@ void * draw_thread () {
     int local_index = 0;
     yCoordinate coord;
 
-	while (1) { 
+    while (1) { 
         pthread_mutex_lock(&buffer_mutex);
         // check if there are new y_coordinates to draw 
         if (local_index < buffer_index) {
             coord = buffer[local_index++];
             pthread_mutex_unlock(&buffer_mutex); // Unlock as soon as data is safely read
 
-			if (coord.is_frozen == 1) {
+            if (coord.is_frozen == 1) {
             
             VGA_box(2*5, 2*coord.frozen_y, 
-                    2*5 + 2, 2*coord.frozen_y + 2,  color);
-			// }
-			// else { 
-			// 	VGA_box(2*coord.frozen_x, 2*coord.frozen_y + 1, 
+                    2*5 + 2, 2*coord.frozen_y + 2,  white);
+            // }
+            // else { 
+            //  VGA_box(2*coord.frozen_x, 2*coord.frozen_y + 1, 
             //             2*coord.frozen_x + 2, 2*coord.frozen_y + 3,  color);
-			// }
-        } 
+            // }
+            } 
         else {
             pthread_mutex_unlock(&buffer_mutex);
             // no new data, sleep for 10ms
@@ -285,61 +308,61 @@ void * draw_thread () {
 int main(void)
 {
 
-	// Declare volatile pointers to I/O registers (volatile 	// means that IO load and store instructions will be used 	// to access these pointer locations, 
-	// instead of regular memory loads and stores) 
+    // Declare volatile pointers to I/O registers (volatile     // means that IO load and store instructions will be used   // to access these pointer locations, 
+    // instead of regular memory loads and stores) 
 
-	// === shared memory =======================
-	// with video process
-	shared_mem_id = shmget(mem_key, 100, IPC_CREAT | 0666);
- 	//shared_mem_id = shmget(mem_key, 100, 0666);
-	shared_ptr = shmat(shared_mem_id, NULL, 0);
+    // === shared memory =======================
+    // with video process
+    shared_mem_id = shmget(mem_key, 100, IPC_CREAT | 0666);
+    //shared_mem_id = shmget(mem_key, 100, 0666);
+    shared_ptr = shmat(shared_mem_id, NULL, 0);
 
-	// === need to mmap: =======================
-	// FPGA_CHAR_BASE
-	// FPGA_ONCHIP_BASE      
-	// HW_REGS_BASE        
+    // === need to mmap: =======================
+    // FPGA_CHAR_BASE
+    // FPGA_ONCHIP_BASE      
+    // HW_REGS_BASE        
   
-	// === get FPGA addresses ==================
+    // === get FPGA addresses ==================
     // Open /dev/mem
-	if( ( fd = open( "/dev/mem", ( O_RDWR | O_SYNC ) ) ) == -1 ) 	{
-		printf( "ERROR: could not open \"/dev/mem\"...\n" );
-		return( 1 );
-	}
+    if( ( fd = open( "/dev/mem", ( O_RDWR | O_SYNC ) ) ) == -1 )    {
+        printf( "ERROR: could not open \"/dev/mem\"...\n" );
+        return( 1 );
+    }
     
     // get virtual addr that maps to physical
-	h2p_lw_virtual_base = mmap( NULL, HW_REGS_SPAN, ( PROT_READ | PROT_WRITE ), MAP_SHARED, fd, HW_REGS_BASE );	
-	if( h2p_lw_virtual_base == MAP_FAILED ) {
-		printf( "ERROR: mmap1() failed...\n" );
-		close( fd );
-		return(1);
-	}
+    h2p_lw_virtual_base = mmap( NULL, HW_REGS_SPAN, ( PROT_READ | PROT_WRITE ), MAP_SHARED, fd, HW_REGS_BASE ); 
+    if( h2p_lw_virtual_base == MAP_FAILED ) {
+        printf( "ERROR: mmap1() failed...\n" );
+        close( fd );
+        return(1);
+    }
     
 
-	// === get VGA char addr =====================
-	// get virtual addr that maps to physical
-	vga_char_virtual_base = mmap( NULL, FPGA_CHAR_SPAN, ( 	PROT_READ | PROT_WRITE ), MAP_SHARED, fd, FPGA_CHAR_BASE );	
-	if( vga_char_virtual_base == MAP_FAILED ) {
-		printf( "ERROR: mmap2() failed...\n" );
-		close( fd );
-		return(1);
-	}
+    // === get VGA char addr =====================
+    // get virtual addr that maps to physical
+    vga_char_virtual_base = mmap( NULL, FPGA_CHAR_SPAN, (   PROT_READ | PROT_WRITE ), MAP_SHARED, fd, FPGA_CHAR_BASE ); 
+    if( vga_char_virtual_base == MAP_FAILED ) {
+        printf( "ERROR: mmap2() failed...\n" );
+        close( fd );
+        return(1);
+    }
     
     // Get the address that maps to the FPGA LED control 
-	vga_char_ptr =(unsigned int *)(vga_char_virtual_base);
+    vga_char_ptr =(unsigned int *)(vga_char_virtual_base);
 
-	// === get VGA pixel addr ====================
-	// get virtual addr that maps to physical
-	vga_pixel_virtual_base = mmap( NULL, FPGA_ONCHIP_SPAN, ( 	PROT_READ | PROT_WRITE ), MAP_SHARED, fd, 			FPGA_ONCHIP_BASE);	
-	if( vga_pixel_virtual_base == MAP_FAILED ) {
-		printf( "ERROR: mmap3() failed...\n" );
-		close( fd );
-		return(1);
-	}
+    // === get VGA pixel addr ====================
+    // get virtual addr that maps to physical
+    vga_pixel_virtual_base = mmap( NULL, FPGA_ONCHIP_SPAN, (    PROT_READ | PROT_WRITE ), MAP_SHARED, fd,           FPGA_ONCHIP_BASE);  
+    if( vga_pixel_virtual_base == MAP_FAILED ) {
+        printf( "ERROR: mmap3() failed...\n" );
+        close( fd );
+        return(1);
+    }
     
     // Get the address that maps to the FPGA pixel buffer
-	vga_pixel_ptr =(unsigned int *)(vga_pixel_virtual_base);
+    vga_pixel_ptr =(unsigned int *)(vga_pixel_virtual_base);
 
-	// ===========================================
+    // ===========================================
 
     // PIO POINTER STUFF
     // Maps to FPGA registers
@@ -348,47 +371,55 @@ int main(void)
     pio_gamma_addr   = (unsigned int *)(h2p_lw_virtual_base +  PIO_GAMMA_BASE );
     pio_is_frozen_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_IS_FROZEN_BASE );
     pio_frozen_y_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_FROZEN_Y_BASE );
+    pio_reset_to_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_TO_BASE );
 
     /// VISUALIZE ON THE SCREEN /// 
 
     char text_x[40] = "init alpha = ";
-	char text_y[40] = "init beta = ";
-	char text_z[40] = "init gamma = ";
+    char text_y[40] = "init beta = ";
+    char text_z[40] = "init gamma = ";
     /* create a message to be displayed on the VGA 
           and LCD displays */
-	char text_top_row[40]    = "DE1-SoC ARM/FPGA\0";
-	char text_bottom_row[40] = "Cornell ece5760\0";
+    char text_top_row[40]    = "DE1-SoC ARM/FPGA\0";
+    char text_bottom_row[40] = "Cornell ece5760\0";
+
+    // VGA_box (0, 0, 639, 479, 0x0000);
 
     VGA_text (34, 1, text_top_row);
-	VGA_text (34, 2, text_bottom_row);
+    VGA_text (34, 2, text_bottom_row);
+    VGA_text (34, 3, text_x);
+    VGA_text (34, 4, text_y);
+    VGA_text (34, 5, text_z);
 
     // Initial values to send to fpga 
-    *pio_alpha_addr = float2fix(temp_alpha);
-    *pio_beta_addr  = float2fix(temp_beta);
-    *pio_gamma_addr = float2fix(temp_gamma);
+    *pio_alpha_addr = float2fix18(temp_alpha);
+    *pio_beta_addr  = float2fix18(temp_beta);
+    *pio_gamma_addr = float2fix18(temp_gamma);
 
 
     // thread identifiers
-   	pthread_t thread_scan, thread_reset, thread_frozen, thread_draw;
+    pthread_t thread_reset, thread_frozen, thread_draw, thread_debug;
 
-	pthread_attr_t attr;
-	pthread_attr_init( &attr );
-	pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_JOINABLE );
-	
-	 // now the threads
-	pthread_create( &thread_reset, NULL,    reset_thread, NULL );
-	pthread_create( &thread_scan, NULL,     scan_thread,  NULL );
+    pthread_attr_t attr;
+    pthread_attr_init( &attr );
+    pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_JOINABLE );
+    
+     // now the threads
+    pthread_create( &thread_reset, NULL,    reset_thread, NULL );
+    // pthread_create( &thread_scan, NULL,     scan_thread,  NULL );
+    pthread_create( &thread_debug, NULL,     debug_thread, NULL );
     pthread_create( &thread_frozen, NULL,   frozen_thread, NULL );
     pthread_create( &thread_draw, NULL,     draw_thread, NULL );
 
-	pthread_join( thread_reset, NULL );
-	pthread_join( thread_scan, NULL );
+    // pthread_join( thread_reset, NULL );
+    // pthread_join( thread_scan, NULL );
+    pthread_join( thread_debug,  NULL );
     pthread_join( thread_frozen, NULL );
-    pthread_join( thread_draw, NULL );
+    pthread_join( thread_draw,   NULL );
 
-   	return 0;
+    return 0;
 
-	// initialize_grid();
+    // initialize_grid();
 
     // VGA_text (10, 1, text_top_row);
     // VGA_text (10, 2, text_bottom_row);
@@ -398,10 +429,10 @@ int main(void)
 
 void VGA_cell(int x1, int y1, int x2, int y2, short pixel_color)
 {
-	VGA_PIXEL(x1,y1,pixel_color);
-	VGA_PIXEL(x1,y2,pixel_color);
-	VGA_PIXEL(x2,y1,pixel_color);
-	VGA_PIXEL(x2,y2,pixel_color);
+    VGA_PIXEL(x1,y1,pixel_color);
+    VGA_PIXEL(x1,y2,pixel_color);
+    VGA_PIXEL(x2,y1,pixel_color);
+    VGA_PIXEL(x2,y2,pixel_color);
 
 }
 
@@ -410,17 +441,17 @@ void VGA_cell(int x1, int y1, int x2, int y2, short pixel_color)
 ****************************************************************************************/
 void VGA_text(int x, int y, char * text_ptr)
 {
-  	volatile char * character_buffer = (char *) vga_char_ptr ;	// VGA character buffer
-	int offset;
-	/* assume that the text string fits on one line */
-	offset = (y << 7) + x;
-	while ( *(text_ptr) )
-	{
-		// write to the character buffer
-		*(character_buffer + offset) = *(text_ptr);	
-		++text_ptr;
-		++offset;
-	}
+    volatile char * character_buffer = (char *) vga_char_ptr ;  // VGA character buffer
+    int offset;
+    /* assume that the text string fits on one line */
+    offset = (y << 7) + x;
+    while ( *(text_ptr) )
+    {
+        // write to the character buffer
+        *(character_buffer + offset) = *(text_ptr); 
+        ++text_ptr;
+        ++offset;
+    }
 }
 
 /****************************************************************************************
@@ -428,16 +459,16 @@ void VGA_text(int x, int y, char * text_ptr)
 ****************************************************************************************/
 void VGA_text_clear()
 {
-  	volatile char * character_buffer = (char *) vga_char_ptr ;	// VGA character buffer
-	int offset, x, y;
-	for (x=0; x<79; x++){
-		for (y=0; y<59; y++){
-	/* assume that the text string fits on one line */
-			offset = (y << 7) + x;
-			// write to the character buffer
-			*(character_buffer + offset) = ' ';		
-		}
-	}
+    volatile char * character_buffer = (char *) vga_char_ptr ;  // VGA character buffer
+    int offset, x, y;
+    for (x=0; x<79; x++){
+        for (y=0; y<59; y++){
+    /* assume that the text string fits on one line */
+            offset = (y << 7) + x;
+            // write to the character buffer
+            *(character_buffer + offset) = ' ';     
+        }
+    }
 }
 
 /****************************************************************************************
@@ -447,27 +478,26 @@ void VGA_text_clear()
 
 void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
 {
-	char  *pixel_ptr ; 
-	int row, col;
+    char  *pixel_ptr ; 
+    int row, col;
 
-	/* check and fix box coordinates to be valid */
-	if (x1>639) x1 = 639;
-	if (y1>479) y1 = 479;
-	if (x2>639) x2 = 639;
-	if (y2>479) y2 = 479;
-	if (x1<0) x1 = 0;
-	if (y1<0) y1 = 0;
-	if (x2<0) x2 = 0;
-	if (y2<0) y2 = 0;
-	if (x1>x2) SWAP(x1,x2);
-	if (y1>y2) SWAP(y1,y2);
-	for (row = y1; row <= y2; row++)
-		for (col = x1; col <= x2; ++col)
-		{
-			//640x480
-			pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
-			// set pixel color
-			*(char *)pixel_ptr = pixel_color;		
-		}
+    /* check and fix box coordinates to be valid */
+    if (x1>639) x1 = 639;
+    if (y1>479) y1 = 479;
+    if (x2>639) x2 = 639;
+    if (y2>479) y2 = 479;
+    if (x1<0) x1 = 0;
+    if (y1<0) y1 = 0;
+    if (x2<0) x2 = 0;
+    if (y2<0) y2 = 0;
+    if (x1>x2) SWAP(x1,x2);
+    if (y1>y2) SWAP(y1,y2);
+    for (row = y1; row <= y2; row++)
+        for (col = x1; col <= x2; ++col)
+        {
+            //640x480
+            pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
+            // set pixel color
+            *(char *)pixel_ptr = pixel_color;       
+        }
 }
-
