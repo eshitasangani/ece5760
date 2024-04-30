@@ -187,7 +187,7 @@ always @(posedge clk) begin
 
                 // read from m10ks for u_curr and v_next for this cell
                 u_curr            <= read_data_u_curr;
-                v_next            <= read_data_v_next;
+                v_next            <= ((read_data_v_next + gamma) >= 18'b01_0000000000000000)? 18'b01_0000000000000000 : (read_data_v_next + gamma);
                 read_addr_u_curr  <= read_addr_u_curr + 19'd1;
                 state             <= 5'd2;
             end
@@ -225,7 +225,7 @@ always @(posedge clk) begin
                 u_neighbor_t <= read_data_u_curr; 
 
                 // read from m10k for v_next
-                v_next            <= read_data_v_next;
+                v_next            <= ((read_data_v_next + gamma) >= 18'b01_0000000000000000)? 18'b01_0000000000000000 : (read_data_v_next + gamma);
 
                 // increment these now, so we can read them a cycle earlier
                 read_addr_u_curr <= read_addr_u_curr + 19'd1;
@@ -254,6 +254,9 @@ always @(posedge clk) begin
                 write_en_u_curr <= 1'b1;
                 write_en_v_next <= 1'b1;
 
+                state <= 5'd7;
+            end
+            5'd7: begin
                 // move up one cell!
                 u_neighbor_b <= u_curr;
                 u_curr       <= u_neighbor_t;
@@ -264,29 +267,27 @@ always @(posedge clk) begin
                 u_next_reg <= u_next_top;
                 v_next_reg <= v_next;
 
-                state <= 5'd7;
-            end
-            5'd7: begin
                 // read from m10k for top neighbor
                 u_neighbor_t <= (read_addr_u_curr >= 19'd10) ? beta : read_data_u_curr; // consider top edge boundary
 
                 // read from m10k for v_next
-                v_next <= (read_addr_v_next >= 19'd10) ? 18'd0 : read_data_v_next; // consider top edge boundary
-
-                // increment these now, so we can read them a cycle earlier
-                // consider top edge boundary: make sure we're not trying to read nonexistent data from m10ks
-                read_addr_u_curr  <= (read_addr_u_curr >= 19'd10) ? read_addr_u_curr : (read_addr_u_curr + 19'd1);
-                read_addr_v_next  <= (read_addr_v_next >= 19'd10) ? read_addr_v_next : (read_addr_v_next + 19'd1);
+                v_next <= (read_addr_v_next >= 19'd10) ? 18'd0 : (((read_data_v_next + gamma) >= 18'b01_0000000000000000)? 18'b01_0000000000000000 : (read_data_v_next + gamma)); // consider top edge boundary
 
                 // incr write addresses
                 if (write_addr_u_curr >= 19'd10) begin
                     write_addr_u_curr <= 19'd0;
                     write_addr_v_next <= 19'd0;
+                    read_addr_u_curr  <= 19'd0;
+                    read_addr_v_next  <= 19'd0;
                     state             <= 5'd8;
                 end
                 else begin
                     write_addr_u_curr <= write_addr_u_curr + 19'd1;
                     write_addr_v_next <= write_addr_v_next + 19'd1;
+                    // increment these now, so we can read them a cycle earlier
+                    // consider top edge boundary: make sure we're not trying to read nonexistent data from m10ks
+                    read_addr_u_curr  <= (read_addr_u_curr >= 19'd10) ? read_addr_u_curr : (read_addr_u_curr + 19'd1);
+                    read_addr_v_next  <= (read_addr_v_next >= 19'd10) ? read_addr_v_next : (read_addr_v_next + 19'd1);
                     state             <= 5'd6;
                 end
                 write_en_u_curr <= 1'b0;
@@ -328,24 +329,36 @@ module diffusion_solver (
     output wire        is_frozen
 );
 
-    wire signed [17:0] u_avg;
+    wire signed [17:0] u_avg_0;
+    wire signed [17:0] u_avg_1;
+    wire signed [17:0] u_avg_total;
     wire signed [17:0] laplace_out;
+    wire signed [17:0] u_next_tmp;
 
     // s = u + v
     // frozen if s >= 1
     assign is_frozen = ((u_next + v_next) >= 18'b01_0000000000000000);
-    assign u_next = u_curr + laplace_out;
+    assign u_next_tmp = (u_curr + laplace_out); 
+    assign u_next = (u_next_tmp >= 18'b01_0000000000000000) ? 18'b01_0000000000000000 : u_next_tmp;
 
-    signed_mult u_avg_calc ( // divide by 6 (num neighbors) -- mult by 1/6
-        .out(u_avg),
-        .a  (u_neighbor_0+u_neighbor_1+u_neighbor_2+u_neighbor_3+u_neighbor_4+u_neighbor_5),
+    signed_mult u_avg_calc0 ( // divide by 6 (num neighbors) -- mult by 1/6
+        .out(u_avg_0),
+        .a  (u_neighbor_0+u_neighbor_1+u_neighbor_2),
         .b  (18'b00_0010101010101010) // 1/6
     );
+
+    signed_mult u_avg_calc1 ( // divide by 6 (num neighbors) -- mult by 1/6
+        .out(u_avg_1),
+        .a  (u_neighbor_3+u_neighbor_4+u_neighbor_5),
+        .b  (18'b00_0010101010101010) // 1/6
+    );
+
+    assign u_avg_total = u_avg_0 + u_avg_1;
 
     signed_mult laplace_calc ( // alpha / 2 * (u_avg - cell.u)
         .out(laplace_out),
         .a  (alpha >>> 1),
-        .b  (u_avg - u_curr)
+        .b  (u_avg_total - u_curr)
     );
 
 endmodule

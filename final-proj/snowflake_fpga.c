@@ -67,7 +67,7 @@ typedef struct {
     int frozen_y;
 } yCoordinate;
 
-#define BUFFER_SIZE 50
+#define BUFFER_SIZE 11
 yCoordinate buffer[BUFFER_SIZE];
 int buffer_index = 0;
 
@@ -179,6 +179,17 @@ void * debug_thread() {
 // reset thread  // 
 ///////////////////////////////////////////////////////////////
 
+
+void clear_buffer() {
+    for ( i = 0; i < 12; i++) {  
+        buffer[i].frozen_y = 0;
+        buffer[i].is_frozen = 0;
+    }
+    buffer_index = 0;
+}
+
+
+
 void * reset_thread() {
 
   while (1) {
@@ -196,6 +207,8 @@ void * reset_thread() {
      
       // clear VGA screen 
       VGA_box (0, 0, 639, 479, 0x0000);
+      clear_buffer();
+    //   printf("reset");
       
       // done initializing
     //   init_reset = 0;
@@ -217,21 +230,18 @@ void * scan_thread () {
                 printf("enter alpha: ");
                 scanf("%f", &temp_alpha);
                 *pio_alpha_addr = float2fix18(temp_alpha);
-
                 break;
 
             case 2: 
                 printf("enter beta: ");
                 scanf("%f", &temp_beta);
                 *pio_beta_addr = float2fix18(temp_beta);
-
                 break;
 
             case 3: 
                 printf("enter gamma: ");
                 scanf("%f", &temp_gamma);
                 *pio_gamma_addr = float2fix18(temp_gamma);
-    
                 break;
 
         }
@@ -257,17 +267,30 @@ void * frozen_thread () {
         // pthread_mutex_lock(&buffer_mutex);
 
         // Store values in the buffer
-        if (buffer_index < 51) {
+        if (buffer_index < 12) {
             buffer[buffer_index].is_frozen = y_froze ;
             buffer[buffer_index].frozen_y = y;
+            // printf("%d \n", buffer_index);
+            
+            // printf("%d \n", y_froze);
+            // printf("%d \n", y);
+            // for ( i = 0; i < buffer_index; ++i) {  // Only iterate up to the current buffer index
+            //     printf("idx %d: is_frozen = %d, frozen_y = %d\n", i, buffer[i].is_frozen, buffer[i].frozen_y);
+            // }
             buffer_index++;
+            *pio_done_send_addr = 1;
+            *pio_done_send_addr = 0;
+            //  printf("done_send");
+            //  printf("\n");
         }
         else { 
             // this means that the buffer is full 
             buffer_index = 0;
+            // printf("bufferfull");
+            //  printf("\n");
         }
         // pthread_mutex_unlock(&buffer_mutex);
-        *pio_done_send_addr = 1;
+        
 
     }
 
@@ -282,28 +305,67 @@ void * draw_thread () {
     yCoordinate coord;
 
     while (1) { 
-        // pthread_mutex_lock(&buffer_mutex);
-        // check if there are new y_coordinates to draw 
-        if (local_index < buffer_index) {
-            coord = buffer[local_index++];
-            // pthread_mutex_unlock(&buffer_mutex); // Unlock as soon as data is safely read
 
-            if (coord.is_frozen == 1) {
+        if (*pio_reset_to_addr) {
+
+            // update pio pointers w the initial values 
+            *(pio_alpha_addr) = float2fix18(temp_alpha);
+            *(pio_beta_addr)  = float2fix18(temp_beta);
+            *(pio_gamma_addr) = float2fix18(temp_gamma);
             
-            VGA_box(2*5, 2*coord.frozen_y, 
-                    2*5 + 2, 2*coord.frozen_y + 2,  white);
-            // }
-            // else { 
-            //  VGA_box(2*coord.frozen_x, 2*coord.frozen_y + 1, 
-            //             2*coord.frozen_x + 2, 2*coord.frozen_y + 3,  color);
-            // }
-            } 
-        else {
-            // pthread_mutex_unlock(&buffer_mutex);
-            // no new data, sleep for 10ms
-            usleep(10000); 
+            // do the actual reset
+            // *pio_reset_from_addr = 1;
+            // *pio_reset_addr = 0;
+            
+            // clear VGA screen 
+            VGA_box (0, 0, 639, 479, 0x0000);
+            clear_buffer();
+            local_index = 0;
+        //   printf("reset");
+            
+            // done initializing
+        //   init_reset = 0;
         }
+        else {
+            // pthread_mutex_lock(&buffer_mutex);
+            // check if there are new y_coordinates to draw 
+            if (local_index < buffer_index) {
+                coord = buffer[local_index];
+                printf("localIDX");
+                printf("%d", local_index);
+                printf("\n");
+                // pthread_mutex_unlock(&buffer_mutex); // Unlock as soon as data is safely read
 
+                if (coord.is_frozen == 1) {
+                
+                    VGA_box(100, 10*coord.frozen_y + 100, 
+                            100 + 10, 10*coord.frozen_y + 110,  blue);
+
+                    // else { 
+                    //  VGA_box(2*coord.frozen_x, 2*coord.frozen_y + 1, 
+                    //             2*coord.frozen_x + 2, 2*coord.frozen_y + 3,  color);
+                    // }
+                } 
+                else {
+                    VGA_box(100, 10*coord.frozen_y + 100, 
+                            100 + 10, 10*coord.frozen_y + 110,  white);
+                }
+                
+            // else {
+                // pthread_mutex_unlock(&buffer_mutex);
+                // no new data, sleep for 10ms
+                
+            // }
+
+            }
+            local_index++;
+
+            if (local_index >= 11) { 
+                local_index = 0;
+            }
+
+
+            usleep(100000); 
         }
     }
 
@@ -410,7 +472,7 @@ int main(void)
     pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_JOINABLE );
     
      // now the threads
-    pthread_create( &thread_reset, NULL,    reset_thread, NULL );
+    // pthread_create( &thread_reset, NULL,    reset_thread, NULL );
     // pthread_create( &thread_scan, NULL,     scan_thread,  NULL );
     pthread_create( &thread_debug, NULL,     debug_thread, NULL );
     pthread_create( &thread_frozen, NULL,   frozen_thread, NULL );

@@ -586,40 +586,50 @@ always @(posedge CLOCK_50) begin
 				end
             end
             5'd5: begin // read m10k for the cell above us so we can calc diffusion for it
-                // read from m10k for top neighbor
-                u_neighbor_t <= read_data_u_curr; 
+				if (!pio_done_send) begin
+					// read from m10k for top neighbor
+					u_neighbor_t <= read_data_u_curr; 
 
-                // read from m10k for v_next
-                v_next            <= ((read_data_v_next + gamma) >= 18'b01_0000000000000000)? 18'b01_0000000000000000 : (read_data_v_next + gamma);
+					// read from m10k for v_next
+					v_next            <= ((read_data_v_next + gamma) >= 18'b01_0000000000000000)? 18'b01_0000000000000000 : (read_data_v_next + gamma);
 
-                // increment these now, so we can read them a cycle earlier
-                read_addr_u_curr <= read_addr_u_curr + 19'd1;
-                read_addr_v_next <= read_addr_v_next + 19'd1;
+					// increment these now, so we can read them a cycle earlier
+					read_addr_u_curr <= read_addr_u_curr + 19'd1;
+					read_addr_v_next <= read_addr_v_next + 19'd1;
 
-                state             <= 5'd6;
+					state             <= 5'd6;
+				end
+				else begin
+					state <= 5'd5;
+				end
 
             end
             5'd6: begin
-                // check if any neighbors are frozen
-                // eventually will have to also check r,l,rc,rl neighbors too but 
-                // right now r,l,rc,rl are edge cells so they are static
-                if (is_frozen_reg || is_frozen_bottom || is_frozen) begin
-                    // if we or any neighbors are frozen, we are a receptive cell.
-                    // write the new s=u+v value to v, write 0 to u
-                    write_data_v_next <= v_next_reg + u_next_reg;
-                    write_data_u_curr <= 18'd0;
-                end
-                else begin
-                    // if us and none of our neighbors are frozen, we are a non-receptive cell
-                    // write 0 to v, write the new s=u+v value to u
-                    write_data_v_next <= 18'd0;
-                    write_data_u_curr <= v_next_reg + u_next_reg;
-                end
+				if (!pio_done_send) begin
+					// check if any neighbors are frozen
+					// eventually will have to also check r,l,rc,rl neighbors too but 
+					// right now r,l,rc,rl are edge cells so they are static
+					if (is_frozen_reg || is_frozen_bottom || is_frozen) begin
+						// if we or any neighbors are frozen, we are a receptive cell.
+						// write the new s=u+v value to v, write 0 to u
+						write_data_v_next <= v_next_reg + u_next_reg;
+						write_data_u_curr <= 18'd0;
+					end
+					else begin
+						// if us and none of our neighbors are frozen, we are a non-receptive cell
+						// write 0 to v, write the new s=u+v value to u
+						write_data_v_next <= 18'd0;
+						write_data_u_curr <= v_next_reg + u_next_reg;
+					end
 
-                write_en_u_curr <= 1'b1;
-                write_en_v_next <= 1'b1;
+					write_en_u_curr <= 1'b1;
+					write_en_v_next <= 1'b1;
 
-                state <= 5'd7;
+					state <= 5'd7;
+				end
+				else begin
+					state <= 5'd6;
+				end
             end
             5'd7: begin
 				if (pio_done_send) begin // we have to wait for the hps to request the next value
@@ -667,7 +677,12 @@ always @(posedge CLOCK_50) begin
             end
 
             5'd8: begin // this is a wait state so we can get our read data at the bottom in state 1 
-                state <= 5'd1;
+				if (!pio_done_send) begin
+                	state <= 5'd1;
+				end
+				else begin
+					state <= 5'd8;
+				end
             end
 
         endcase
