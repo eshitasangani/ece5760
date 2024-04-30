@@ -39,10 +39,11 @@ pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define PIO_ALPHA_BASE      0x100
 #define PIO_BETA_BASE       0x110
 #define PIO_GAMMA_BASE      0x120
-#define PIO_RESET_FROM_BASE  0x130
+#define PIO_RESET_FROM_BASE 0x130
 #define PIO_IS_FROZEN_BASE  0x140
 #define PIO_FROZEN_Y_BASE   0x150
 #define PIO_RESET_TO_BASE   0x160
+#define PIO_DONE_SEND_BASE  0x170
 
 // =============================== FPGA ============================
 volatile unsigned int *pio_alpha_addr       = NULL;
@@ -53,6 +54,7 @@ volatile unsigned int *pio_is_frozen_addr       = NULL;
 // volatile unsigned int *pio_frozen_x_addr    = NULL;
 volatile unsigned int *pio_frozen_y_addr    = NULL;
 volatile unsigned int *pio_reset_to_addr    = NULL;
+volatile unsigned int *pio_done_send_addr   = NULL;
 
 
 // fix18 frozen_x;
@@ -250,6 +252,7 @@ void * frozen_thread () {
         // read values from the FPGA 
         int y       = *pio_frozen_y_addr;
         int y_froze = *pio_is_frozen_addr;
+        
 
         // pthread_mutex_lock(&buffer_mutex);
 
@@ -264,6 +267,7 @@ void * frozen_thread () {
             buffer_index = 0;
         }
         // pthread_mutex_unlock(&buffer_mutex);
+        *pio_done_send_addr = 1;
 
     }
 
@@ -372,6 +376,7 @@ int main(void)
     pio_is_frozen_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_IS_FROZEN_BASE );
     pio_frozen_y_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_FROZEN_Y_BASE );
     pio_reset_to_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_TO_BASE );
+    pio_done_send_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_DONE_SEND_BASE );
 
     /// VISUALIZE ON THE SCREEN /// 
 
@@ -417,7 +422,7 @@ int main(void)
     pthread_join( thread_frozen, NULL );
     pthread_join( thread_draw,   NULL );
 
-	printf(buffer_index);
+	// printf(buffer_index);
     // for ( i = 0; i < buffer_index; ++i) {  // Only iterate up to the current buffer index
     //     printf("idx %d: is_frozen = %d, frozen_y = %d\n", i, buffer[i].is_frozen, buffer[i].frozen_y);
     // }
