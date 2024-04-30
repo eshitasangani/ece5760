@@ -18,7 +18,7 @@
 /* Cyclone V FPGA devices */
 #define HW_REGS_BASE          0xff200000
 //#define HW_REGS_SPAN        0x00200000 
-#define HW_REGS_SPAN          0x00005000 
+#define HW_REGS_SPAN          0x00005000                                      
 
 #define FPGA_ONCHIP_BASE      0xC8000000
 //#define FPGA_ONCHIP_END       0xC803FFFF
