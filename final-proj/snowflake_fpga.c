@@ -156,14 +156,14 @@ short color;
 #include <stdio.h>
 
 void print_buffer() {
-    pthread_mutex_lock(&buffer_mutex);  // Lock the buffer for safe access
+    // pthread_mutex_lock(&buffer_mutex);  // Lock the buffer for safe access
 
     printf("buffer content:\n");
-    for (int i = 0; i < buffer_index; ++i) {  // Only iterate up to the current buffer index
+    for ( i = 0; i < buffer_index; ++i) {  // Only iterate up to the current buffer index
         printf("idx %d: is_frozen = %d, frozen_y = %d\n", i, buffer[i].is_frozen, buffer[i].frozen_y);
     }
 
-    pthread_mutex_unlock(&buffer_mutex);  // Unlock the buffer after done reading
+    // pthread_mutex_unlock(&buffer_mutex);  // Unlock the buffer after done reading
 }
 
 void * debug_thread() {
@@ -251,7 +251,7 @@ void * frozen_thread () {
         int y       = *pio_frozen_y_addr;
         int y_froze = *pio_is_frozen_addr;
 
-        pthread_mutex_lock(&buffer_mutex);
+        // pthread_mutex_lock(&buffer_mutex);
 
         // Store values in the buffer
         if (buffer_index < 51) {
@@ -263,7 +263,7 @@ void * frozen_thread () {
             // this means that the buffer is full 
             buffer_index = 0;
         }
-        pthread_mutex_unlock(&buffer_mutex);
+        // pthread_mutex_unlock(&buffer_mutex);
 
     }
 
@@ -278,11 +278,11 @@ void * draw_thread () {
     yCoordinate coord;
 
     while (1) { 
-        pthread_mutex_lock(&buffer_mutex);
+        // pthread_mutex_lock(&buffer_mutex);
         // check if there are new y_coordinates to draw 
         if (local_index < buffer_index) {
             coord = buffer[local_index++];
-            pthread_mutex_unlock(&buffer_mutex); // Unlock as soon as data is safely read
+            // pthread_mutex_unlock(&buffer_mutex); // Unlock as soon as data is safely read
 
             if (coord.is_frozen == 1) {
             
@@ -295,7 +295,7 @@ void * draw_thread () {
             // }
             } 
         else {
-            pthread_mutex_unlock(&buffer_mutex);
+            // pthread_mutex_unlock(&buffer_mutex);
             // no new data, sleep for 10ms
             usleep(10000); 
         }
@@ -416,6 +416,11 @@ int main(void)
     pthread_join( thread_debug,  NULL );
     pthread_join( thread_frozen, NULL );
     pthread_join( thread_draw,   NULL );
+
+	printf(buffer_index);
+    // for ( i = 0; i < buffer_index; ++i) {  // Only iterate up to the current buffer index
+    //     printf("idx %d: is_frozen = %d, frozen_y = %d\n", i, buffer[i].is_frozen, buffer[i].frozen_y);
+    // }
 
     return 0;
 
