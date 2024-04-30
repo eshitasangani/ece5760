@@ -27,11 +27,11 @@ initial begin
 end
 
 
-reg  [15:0] write_addr_u_curr;
-reg  [15:0] write_addr_v_next;
+reg  [18:0] write_addr_u_curr;
+reg  [18:0] write_addr_v_next;
 
-reg  [15:0] read_addr_u_curr;
-reg  [15:0] read_addr_v_next;
+reg  [18:0] read_addr_u_curr;
+reg  [18:0] read_addr_v_next;
 
 reg         write_en_u_curr;
 reg         write_en_v_next;
@@ -60,6 +60,10 @@ assign alpha = 18'b01_0000000000000000;
 wire signed [17:0] beta;
 assign beta = 18'b00_0100000000000000;
 
+wire signed [17:0] gamma;
+assign gamma = 18'b00_0010000000000000;
+
+
 // outputs from diffusion solver
 wire signed [17:0] u_next_top;
 reg  signed [17:0] u_next_reg; // this will store our current node's output so that we can free up the solver to calculate the diffusion of the cell above us. 
@@ -67,6 +71,7 @@ reg  signed [17:0] u_next_reg; // this will store our current node's output so t
 wire is_frozen;
 reg  is_frozen_reg; // store frozen val for the current node so we can free up solver to calculate diffusion for the node above us.
 reg  is_frozen_bottom; // store frozen val for the cell below us 
+
 
 /*
 neighbor indexing: 
@@ -127,14 +132,14 @@ reg [4:0] state;
 always @(posedge clk) begin
     if (reset) begin
         write_data_u_curr <= beta;
-        write_data_v_curr <= 18'd0;
-        write_addr_u_curr <= 16'd0;
-        write_addr_v_curr <= 16'd0;
+        write_data_v_next <= 18'd0;
+        write_addr_u_curr <= 19'd0;
+        write_addr_v_next <= 19'd0;
         write_en_u_curr <= 1'd1;
-        write_en_v_curr <= 1'd1;
+        write_en_v_next <= 1'd1;
 
-        read_addr_u_curr <= 16'd0;
-        read_addr_v_curr <= 16'd0;
+        read_addr_u_curr <= 19'd0;
+        read_addr_v_next <= 19'd0;
 
         state  <= 5'd0;
     end
@@ -144,12 +149,12 @@ always @(posedge clk) begin
             5'd0: begin // initialization
                 // SETTING INITIAL U AND V VALUES //
                 // only center node is frozen, set to 1
-                if (write_addr_u_curr == 16'd3) begin 
+                if (write_addr_u_curr == 19'd3) begin 
                     // on next cycle, it'll be the center node
-                    write_data_u_curr; <= 18'd0;
+                    write_data_u_curr <= 18'd0;
                     write_data_v_next <= 18'b01_0000000000000000 + gamma;
                 end
-                else if (write_addr_u_curr == 16'd2 || write_addr_u_curr == 16'd4) begin
+                else if (write_addr_u_curr == 19'd2 || write_addr_u_curr == 19'd4) begin
                     // the nodes around the center node are receptive, but not frozen 
                     write_data_u_curr <= 18'd0;
                     write_data_v_next <= beta + gamma;
@@ -161,17 +166,17 @@ always @(posedge clk) begin
                 end
 
                 // MOVE FORWARD OR STOP //
-                if (write_addr_u_curr >= 16'd10) begin
+                if (write_addr_u_curr >= 19'd10) begin
                     state <= 5'd1;
-                    write_addr_u_curr <= 16'd0;
-                    write_addr_v_next <= 16'd0;
+                    write_addr_u_curr <= 19'd0;
+                    write_addr_v_next <= 19'd0;
                     write_en_u_curr <= 1'd0;
                     write_en_v_next <= 1'd0;
                 end
                 else begin
                     state <= 5'd0;
-                    write_addr_u_curr <= write_addr_u_curr + 16'd1;
-                    write_addr_v_next <= write_addr_v_next + 16'd1;
+                    write_addr_u_curr <= write_addr_u_curr + 19'd1;
+                    write_addr_v_next <= write_addr_v_next + 19'd1;
                     write_en_u_curr <= 1'd1;
                     write_en_v_next <= 1'd1;
                 end
@@ -183,7 +188,7 @@ always @(posedge clk) begin
                 // read from m10ks for u_curr and v_next for this cell
                 u_curr            <= read_data_u_curr;
                 v_next            <= read_data_v_next;
-                read_addr_u_curr  <= read_addr_u_curr + 16'd1;
+                read_addr_u_curr  <= read_addr_u_curr + 19'd1;
                 state             <= 5'd2;
             end
 
@@ -196,8 +201,8 @@ always @(posedge clk) begin
                 u_neighbor_t <= read_data_u_curr; 
 
                 // increment these now, so we can read them a cycle earlier
-                read_addr_u_curr <= read_addr_u_curr + 16'd1;
-                read_addr_v_next <= read_addr_v_next + 16'd1;
+                read_addr_u_curr <= read_addr_u_curr + 19'd1;
+                read_addr_v_next <= read_addr_v_next + 19'd1;
 
                 state             <= 5'd4;
             end
@@ -211,6 +216,7 @@ always @(posedge clk) begin
                 // take a step up
                 u_neighbor_b <= u_curr;
                 u_curr <= u_neighbor_t;
+                state <= 5'd5;
                 
 
             end
@@ -222,8 +228,8 @@ always @(posedge clk) begin
                 v_next            <= read_data_v_next;
 
                 // increment these now, so we can read them a cycle earlier
-                read_addr_u_curr <= read_addr_u_curr + 16'd1;
-                read_addr_v_next <= read_addr_v_next + 16'd1;
+                read_addr_u_curr <= read_addr_u_curr + 19'd1;
+                read_addr_v_next <= read_addr_v_next + 19'd1;
 
                 state             <= 5'd6;
 
@@ -255,32 +261,32 @@ always @(posedge clk) begin
                 is_frozen_bottom <= is_frozen_reg;
                 is_frozen_reg    <= is_frozen;
 
-                u_next_reg <= u_next;
+                u_next_reg <= u_next_top;
                 v_next_reg <= v_next;
 
                 state <= 5'd7;
             end
             5'd7: begin
                 // read from m10k for top neighbor
-                u_neighbor_t <= (read_addr_u_curr >= 16'd10) ? beta : read_data_u_curr; // consider top edge boundary
+                u_neighbor_t <= (read_addr_u_curr >= 19'd10) ? beta : read_data_u_curr; // consider top edge boundary
 
                 // read from m10k for v_next
-                v_next <= (read_addr_v_next >= 16'd10) ? 18'd0 : read_data_v_next; // consider top edge boundary
+                v_next <= (read_addr_v_next >= 19'd10) ? 18'd0 : read_data_v_next; // consider top edge boundary
 
                 // increment these now, so we can read them a cycle earlier
                 // consider top edge boundary: make sure we're not trying to read nonexistent data from m10ks
-                read_addr_u_curr  <= (read_addr_u_curr >= 16'd10) ? read_addr_u_curr : (read_addr_u_curr + 16'd1);
-                read_addr_v_next  <= (read_addr_v_next >= 16'd10) ? read_addr_v_next : (read_addr_v_next + 16'd1);
+                read_addr_u_curr  <= (read_addr_u_curr >= 19'd10) ? read_addr_u_curr : (read_addr_u_curr + 19'd1);
+                read_addr_v_next  <= (read_addr_v_next >= 19'd10) ? read_addr_v_next : (read_addr_v_next + 19'd1);
 
                 // incr write addresses
-                if (write_addr_u_curr >= 16'd10) begin
-                    write_addr_u_curr <= 16'd0;
-                    write_addr_v_next <= 16'd0;
+                if (write_addr_u_curr >= 19'd10) begin
+                    write_addr_u_curr <= 19'd0;
+                    write_addr_v_next <= 19'd0;
                     state             <= 5'd8;
                 end
                 else begin
-                    write_addr_u_curr <= write_addr_u_curr + 16'd1;
-                    write_addr_v_next <= write_addr_v_next + 16'd1;
+                    write_addr_u_curr <= write_addr_u_curr + 19'd1;
+                    write_addr_v_next <= write_addr_v_next + 19'd1;
                     state             <= 5'd6;
                 end
                 write_en_u_curr <= 1'b0;
@@ -338,7 +344,7 @@ module diffusion_solver (
 
     signed_mult laplace_calc ( // alpha / 2 * (u_avg - cell.u)
         .out(laplace_out),
-        .a  (alpha >> 1),
+        .a  (alpha >>> 1),
         .b  (u_avg - u_curr)
     );
 
@@ -360,3 +366,29 @@ module signed_mult (out, a, b);
 	assign out = {mult_out[35], mult_out[34:16]};
 endmodule
 //////////////////////////////////////////////////
+
+
+//============================================================
+// M10K module for testing
+//============================================================
+// See example 12-16 in 
+// http://people.ece.cornell.edu/land/courses/ece5760/DE1_SOC/HDL_style_qts_qii51007.pdf
+//============================================================
+
+module M10K_1000_8( 
+    output reg [17:0] q,
+    input [17:0] d,
+    input [18:0] write_address, read_address,
+    input we, clk
+);
+	 // force M10K ram style
+    reg [17:0] mem [68266:0]  /* synthesis ramstyle = "no_rw_check, M10K" */;
+	// reg [7:0] mem [153600:0]; // 2 solvers
+	// reg [7:0] mem [76800:0]; // 4 solvers
+    always @ (posedge clk) begin
+        if (we) begin
+            mem[write_address] <= d;
+		  end
+        q <= mem[read_address]; // q doesn't get d in this clock cycle
+    end
+endmodule
