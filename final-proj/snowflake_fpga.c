@@ -72,13 +72,14 @@ int buffer_index = 0;
 pthread_mutex_t buffer_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t buffer_not_empty = PTHREAD_COND_INITIALIZER;
 pthread_cond_t buffer_not_full = PTHREAD_COND_INITIALIZER;
-
+pthread_cond_t one_iteration = PTHREAD_COND_INITIALIZER;
 
 /* function prototypes */
 void VGA_text (int, int, char *);
 void VGA_text_clear();
 void VGA_box (int, int, int, int, short);
 void VGA_cell (int, int, int, int, short);
+void VGA_rect (int, int, int, int, short);
 
 // MACROS FOR FIXED POINT CONVERSION // 
 typedef signed int fix18 ;
@@ -147,8 +148,8 @@ int i,j,k,x,y;
 
 // INITAL VARIABLES TO SEND TO FGPA 
 float temp_alpha = 1.0;
-float temp_beta = 0.8;
-float temp_gamma = 0.01;
+float temp_beta = 0.25;
+float temp_gamma = 0.125;
 
 // change reset value via trigger 
 int init_reset = 0; 
@@ -204,6 +205,8 @@ void * reset_thread() {
         *(pio_alpha_addr) = float2fix18(temp_alpha);
         *(pio_beta_addr)  = float2fix18(temp_beta);
         *(pio_gamma_addr) = float2fix18(temp_gamma);
+        *pio_done_send_addr = 0;
+
         
       // clear VGA screen 
       VGA_box (0, 0, 639, 479, 0x0000);
@@ -280,11 +283,18 @@ void * frozen_thread () {
             *pio_done_send_addr = 0;
             //  printf("done_send");
             //  printf("\n");
+            printf("buffer content:\n");
+            for ( i = 0; i < buffer_index; ++i) {  // Only iterate up to the current buffer index
+                printf("idx %d: is_frozen = %d, frozen_y = %d\n", i, buffer[i].is_frozen, buffer[i].frozen_y);
+            }
         }
         else { 
             // this means that the buffer is full 
+            
             buffer_index = 0;
-            // printf("bufferfull");
+            clear_buffer();
+            
+            printf("bufferfull");
             //  printf("\n");
         }
         // pthread_mutex_unlock(&buffer_mutex);
@@ -322,14 +332,14 @@ void * draw_thread () {
 
             // clear VGA screen
             VGA_box (0, 0, 639, 479, 0x0000);
-            center = 0; // i dont think i need this but idk lol
             // want the buffer to start from the beginning
             // i think we need these three lines upon reset but adding them fucks it up?? 
             // it makes it so that the buffer contet is just empty upon reset!!! 
             // i think smtg is wrong with reset......
+            // clear_buffer();
 
             // pthread_mutex_lock(&buffer_mutex);
-            // buffer_index = 0;
+            buffer_index = 0;
             // pthread_mutex_unlock(&buffer_mutex);
 
         }
@@ -346,59 +356,116 @@ void * draw_thread () {
             }
             // once the buffer has something, unlock mutex and allow other threads 
             pthread_mutex_unlock(&buffer_mutex);
-      
 
-            if (buffer_index > 0) { 
-                // There is something in the buffer, let's check! 
+            // now we are gpmma be readomg through the data 
 
-                // Sort the buffer based on frozen_y coordinates
-                qsort(buffer, buffer_index, sizeof(yCoordinate), compare_y);
+            // Sort the buffer based on frozen_y coordinates
+            qsort(buffer, buffer_index, sizeof(yCoordinate), compare_y);
 
-                // Draw the center cell in white 
-                // middle element of the sorted buffer, used as sanity check for debugging
-                int center_index = buffer_index / 2;
-                yCoordinate center_coord = buffer[center_index];
-                VGA_box(100, 10 * center_coord.frozen_y + 100, 
-                        100 + 10, 10 * center_coord.frozen_y + 110, white);
+            // Draw the center cell in white 
+            // middle element of the sorted buffer, used as sanity check for debugging
+            int center_index = buffer_index / 2;
+            yCoordinate center_coord = buffer[center_index];
+            VGA_rect(100, 10 * center_coord.frozen_y + 100, 
+                    100 + 10, 10 * center_coord.frozen_y + 110, yellow);
 
-                // Draw cells outward from the center
-                for (offset = buffer_index / 2; offset > 0; --offset) {
-                    // calculating indices of each cells to draw on either side of the center
-                    int index1 = (center + offset) % buffer_index;
-                    int index2 = (center - offset + buffer_index) % buffer_index;
+            // Draw cells outward from the center
+            for (offset = buffer_index / 2; offset > 0; --offset) {
+                // calculating indices of each cells to draw on either side of the center
+                int index1 = (center_index + offset) % buffer_index;
+                int index2 = (center_index - offset) % buffer_index;
 
-                    // obtain coordinates from the bufer
-                    yCoordinate coord1 = buffer[index1];
-                    yCoordinate coord2 = buffer[index2];
+                // obtain coordinates from the bufer
+                yCoordinate coord1 = buffer[index1];
+                yCoordinate coord2 = buffer[index2];
 
-                    // since we are drawing 2 indices, check if both are frozen/not frozen
+                // since we are drawing 2 indices, check if both are frozen/not frozen
 
-                    if (coord1.is_frozen == 1) {
-                        VGA_box(100, 10 * coord1.frozen_y + 100, 
-                                100 + 10, 10 * coord1.frozen_y + 110, blue);
-                    } else {
-                        VGA_box(100, 10 * coord1.frozen_y + 100, 
-                                100 + 10, 10 * coord1.frozen_y + 110, white);
-                    }
-                    if (coord2.is_frozen == 1) {
-                        VGA_box(100, 10 * coord2.frozen_y + 100, 
-                                100 + 10, 10 * coord2.frozen_y + 110, blue);
-                    } else {
-                        VGA_box(100, 10 * coord2.frozen_y + 100, 
-                                100 + 10, 10 * coord2.frozen_y + 110, white);
-                    }
-                    // used for controlling the drawing speed
-                    usleep(100000); 
+                if (coord1.is_frozen == 1) {
+                    VGA_rect(100, 10 * coord1.frozen_y + 100, 
+                            100 + 10, 10 * coord1.frozen_y + 110, blue);
+                } else {
+                    VGA_rect(100, 10 * coord1.frozen_y + 100, 
+                            100 + 10, 10 * coord1.frozen_y + 110, white);
                 }
+                if (coord2.is_frozen == 1) {
+                    VGA_rect(100, 10 * coord2.frozen_y + 100, 
+                            100 + 10, 10 * coord2.frozen_y + 110, blue);
+                } else {
+                    VGA_rect(100, 10 * coord2.frozen_y + 100, 
+                            100 + 10, 10 * coord2.frozen_y + 110, white);
+                }
+                buffer_index++;      
+            }
+            // used for controlling the drawing speed
+            usleep(500000); 
 
-            // Reset buffer after drawing the snowflake
-            buffer_index = 0; 
+            
+            // for ( buffer_index = 0; j < BUFFER_SIZE; buffer_index++) {  // Only iterate up to the current buffer index]
+            //     yCoordinate coord1 = buffer[buffer_index];
+            //     if (coord1.is_frozen == 1) {
+            //             VGA_rect(100, 10 * coord1.frozen_y + 100, 
+            //                     100 + 10, 10 * coord1.frozen_y + 110, blue);
+            //         } else {
+            //             VGA_rect(100, 10 * coord1.frozen_y + 100, 
+            //                     100 + 10, 10 * coord1.frozen_y + 110, white);
+            //         }
+            // }
+
+            // usleep(500000); 
             pthread_cond_signal(&buffer_not_full); 
+            
+        //     if (buffer_index > 0 && buffer_index < 12 ) { 
+        //         // There is something in the buffer, let's check! 
 
-        }
+        //         // Sort the buffer based on frozen_y coordinates
+        //         qsort(buffer, buffer_index, sizeof(yCoordinate), compare_y);
+
+        //         // Draw the center cell in white 
+        //         // middle element of the sorted buffer, used as sanity check for debugging
+        //         int center_index = buffer_index / 2;
+        //         yCoordinate center_coord = buffer[center_index];
+        //         VGA_rect(100, 10 * center_coord.frozen_y + 100, 
+        //                 100 + 10, 10 * center_coord.frozen_y + 110, yellow);
+
+        //         // Draw cells outward from the center
+        //         for (offset = buffer_index / 2; offset > 0; --offset) {
+        //             // calculating indices of each cells to draw on either side of the center
+        //             int index1 = (center + offset) % buffer_index;
+        //             int index2 = (center - offset + buffer_index) % buffer_index;
+
+        //             // obtain coordinates from the bufer
+        //             yCoordinate coord1 = buffer[index1];
+        //             yCoordinate coord2 = buffer[index2];
+
+        //             // since we are drawing 2 indices, check if both are frozen/not frozen
+
+        //             if (coord1.is_frozen == 1) {
+        //                 VGA_rect(100, 10 * coord1.frozen_y + 100, 
+        //                         100 + 10, 10 * coord1.frozen_y + 110, blue);
+        //             } else {
+        //                 VGA_rect(100, 10 * coord1.frozen_y + 100, 
+        //                         100 + 10, 10 * coord1.frozen_y + 110, white);
+        //             }
+        //             if (coord2.is_frozen == 1) {
+        //                 VGA_rect(100, 10 * coord2.frozen_y + 100, 
+        //                         100 + 10, 10 * coord2.frozen_y + 110, blue);
+        //             } else {
+        //                 VGA_rect(100, 10 * coord2.frozen_y + 100, 
+        //                         100 + 10, 10 * coord2.frozen_y + 110, white);
+        //             }
+        //             buffer_index++;      
+        //         }
+        //         // used for controlling the drawing speed
+        //         usleep(500000); 
+
+        //     // Reset buffer after drawing the snowflake
+        //     buffer_index = 0; 
+        //     pthread_cond_signal(&buffer_not_full); 
+
         
-        pthread_mutex_unlock(&buffer_mutex);
         }
+        pthread_mutex_unlock(&buffer_mutex);
     }
 
 }
@@ -507,13 +574,13 @@ int main(void)
      // now the threads
     // pthread_create( &thread_reset, NULL,    reset_thread, NULL );
     // pthread_create( &thread_scan, NULL,     scan_thread,  NULL );
-    pthread_create( &thread_debug, NULL,     debug_thread, NULL );
+    // pthread_create( &thread_debug, NULL,     debug_thread, NULL );
     pthread_create( &thread_frozen, NULL,   frozen_thread, NULL );
     pthread_create( &thread_draw, NULL,     draw_thread, NULL );
 
     // pthread_join( thread_reset, NULL );
     // pthread_join( thread_scan, NULL );
-    pthread_join( thread_debug,  NULL );
+    // pthread_join( thread_debug,  NULL );
     pthread_join( thread_frozen, NULL );
     pthread_join( thread_draw,   NULL );
 
@@ -607,4 +674,46 @@ void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
             // set pixel color
             *(char *)pixel_ptr = pixel_color;       
         }
+}
+
+/****************************************************************************************
+ * Draw an UNFILLED rectangle on the VGA monitor 
+****************************************************************************************/
+void VGA_rect(int x1, int y1, int x2, int y2, short pixel_color)
+{
+    char  *pixel_ptr ; 
+    int row, col;
+
+    /* check and fix box coordinates to be valid */
+    if (x1>639) x1 = 639;
+    if (y1>479) y1 = 479;
+    if (x2>639) x2 = 639;
+    if (y2>479) y2 = 479;
+    if (x1<0) x1 = 0;
+    if (y1<0) y1 = 0;
+    if (x2<0) x2 = 0;
+    if (y2<0) y2 = 0;
+    if (x1>x2) SWAP(x1,x2);
+    if (y1>y2) SWAP(y1,y2);
+    for (row = y1; row <= y2; row++){
+        if (row == y1 || row == y2){
+            for (col = x1; col <= x2; ++col)
+            {
+                //640x480
+                pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
+                // set pixel color
+                *(char *)pixel_ptr = pixel_color;       
+            }
+        }
+        else{
+            //640x480
+            pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + x1 ;
+            // set pixel color
+            *(char *)pixel_ptr = pixel_color;   
+            //640x480
+            pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + x2 ;
+            // set pixel color
+            *(char *)pixel_ptr = pixel_color;   
+        }
+    }
 }
