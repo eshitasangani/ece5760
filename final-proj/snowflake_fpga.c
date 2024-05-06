@@ -263,12 +263,14 @@ void * frozen_thread () {
         int y_froze = *pio_is_frozen_addr;
 
         // wait until the buffer is full !!
+        printf(y);
+        printf(y_froze);
         
         pthread_mutex_lock(&buffer_mutex);
 
-        while (buffer_index >= BUFFER_SIZE) {
-            pthread_cond_wait(&buffer_not_full, &buffer_mutex);
-        }
+        // while (buffer_index >= BUFFER_SIZE) {
+        //     pthread_cond_wait(&buffer_not_full, &buffer_mutex);
+        // }
 
         // Store values in the buffer
         if (buffer_index < BUFFER_SIZE) {
@@ -276,17 +278,16 @@ void * frozen_thread () {
             buffer[buffer_index].frozen_y = y;
 
             buffer_index++;
-            pthread_cond_signal(&buffer_not_empty); // Signal buffer is not empty
+            // pthread_cond_signal(&buffer_not_empty); // Signal buffer is not empty
             pthread_mutex_unlock(&buffer_mutex);
 
             *pio_done_send_addr = 1;
             *pio_done_send_addr = 0;
-            //  printf("done_send");
-            //  printf("\n");
-            printf("buffer content:\n");
-            for ( i = 0; i < buffer_index; ++i) {  // Only iterate up to the current buffer index
-                printf("idx %d: is_frozen = %d, frozen_y = %d\n", i, buffer[i].is_frozen, buffer[i].frozen_y);
-            }
+ 
+            // printf("buffer content:\n");
+            // for ( i = 0; i < buffer_index; ++i) {  // Only iterate up to the current buffer index
+            //     printf("idx %d: is_frozen = %d, frozen_y = %d\n", i, buffer[i].is_frozen, buffer[i].frozen_y);
+            // }
         }
         else { 
             // this means that the buffer is full 
@@ -360,7 +361,7 @@ void * draw_thread () {
             // now we are gpmma be readomg through the data 
 
             // Sort the buffer based on frozen_y coordinates
-            qsort(buffer, buffer_index, sizeof(yCoordinate), compare_y);
+            // qsort(buffer, buffer_index, sizeof(yCoordinate), compare_y);
 
             // Draw the center cell in white 
             // middle element of the sorted buffer, used as sanity check for debugging
