@@ -469,12 +469,11 @@ int main(void)
                 // handshake ??? not sure if it needs to be here or in the other part 
                 // so actually i think it should be in the other part
                 // for each cell, map pixels to draw onto the vga
-                int count = 0;
+                // int count = 0;
                 if (cells[i][j].s >= 1) { // if frozen, do the cell mappings to m10k memory and set color
-                    for (x = 0; x < 3; x++) {
-                        for (y = 0; y < 3; y++) {
-                            // add some handshake here ?????????
-                            // send the values over to be written to an m10k block? mapping is already done
+                    for (x = 0; x < 2; x++) {
+                        for (y = 0; y < 2; y++) {
+                        
                             int cellx = (2*i)+x;
                             int celly = (2*j)+y;
                             *write_address = (640*celly)+cellx;
@@ -485,8 +484,8 @@ int main(void)
                     }
                 }
                 else {
-                    for (x = 0; x < 3; x++) {
-                        for (y = 0; y < 3; y++) {
+                    for (x = 0; x < 2; x++) {
+                        for (y = 0; y < 2; y++) {
                             // add some handshake here ?????????
                             int cellx = (2*i)+x;
                             int celly = (2*j)+y;
