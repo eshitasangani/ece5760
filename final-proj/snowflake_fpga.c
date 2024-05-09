@@ -2,7 +2,7 @@
 /// 640x480 version!
 /// change to fixed point 
 /// compile with:
-/// gcc snowflake_fpga.c -o snow -pthread
+/// gcc snow.c -o snow -pthread
 ///////////////////////////////////////
 #include <stdio.h>
 #include <stdlib.h>
@@ -148,8 +148,8 @@ int i,j,k,x,y;
 
 // INITAL VARIABLES TO SEND TO FGPA 
 float temp_alpha = 1.0;
-float temp_beta = 0.25;
-float temp_gamma = 0.125;
+float temp_beta = 0.8;
+float temp_gamma = 0.01;
 
 // change reset value via trigger 
 int init_reset = 0; 
@@ -187,7 +187,7 @@ void * debug_thread() {
 
 
 void clear_buffer() {
-    for ( i = 0; i < 12; i++) {  
+    for ( i = 0; i < 11; i++) {  
         buffer[i].frozen_y = 0;
         buffer[i].is_frozen = 0;
     }
@@ -195,57 +195,57 @@ void clear_buffer() {
 }
 
 
-void * reset_thread() {
+// void * reset_thread() {
 
-  while (1) {
+//   while (1) {
   
-    if (*pio_reset_to_addr) {
+//     if (*pio_reset_to_addr) {
     
-        // update pio pointers w the initial values 
-        *(pio_alpha_addr) = float2fix18(temp_alpha);
-        *(pio_beta_addr)  = float2fix18(temp_beta);
-        *(pio_gamma_addr) = float2fix18(temp_gamma);
-        *pio_done_send_addr = 0;
+//         // update pio pointers w the initial values 
+//         *(pio_alpha_addr) = float2fix18(temp_alpha);
+//         *(pio_beta_addr)  = float2fix18(temp_beta);
+//         *(pio_gamma_addr) = float2fix18(temp_gamma);
+//         *pio_done_send_addr = 0;
 
         
-      // clear VGA screen 
-      VGA_box (0, 0, 639, 479, 0x0000);
-      clear_buffer();
+//       // clear VGA screen 
+//       VGA_box (0, 0, 639, 479, 0x0000);
+//       clear_buffer();
 
-    }
-  }
-}
+//     }
+//   }
+// }
 
 ///////////////////////////////////////////////////////////////
 // scan thread  // 
 ///////////////////////////////////////////////////////////////
-void * scan_thread () { 
+// void * scan_thread () { 
 
-    while (1) { 
-        printf("1: alpha, 2: beta 3. gamma \n");
-        scanf("%i", &set);
+//     while (1) { 
+//         printf("1: alpha, 2: beta 3. gamma \n");
+//         scanf("%i", &set);
 
-        switch (set) {
-            case 1: 
-                printf("enter alpha: ");
-                scanf("%f", &temp_alpha);
-                *pio_alpha_addr = float2fix18(temp_alpha);
-                break;
+//         switch (set) {
+//             case 1: 
+//                 printf("enter alpha: ");
+//                 scanf("%f", &temp_alpha);
+//                 *pio_alpha_addr = float2fix18(temp_alpha);
+//                 break;
 
-            case 2: 
-                printf("enter beta: ");
-                scanf("%f", &temp_beta);
-                *pio_beta_addr = float2fix18(temp_beta);
-                break;
+//             case 2: 
+//                 printf("enter beta: ");
+//                 scanf("%f", &temp_beta);
+//                 *pio_beta_addr = float2fix18(temp_beta);
+//                 break;
 
-            case 3: 
-                printf("enter gamma: ");
-                scanf("%f", &temp_gamma);
-                *pio_gamma_addr = float2fix18(temp_gamma);
-                break;
-        }
-    }
-}
+//             case 3: 
+//                 printf("enter gamma: ");
+//                 scanf("%f", &temp_gamma);
+//                 *pio_gamma_addr = float2fix18(temp_gamma);
+//                 break;
+//         }
+//     }
+// }
 
 
 /////////////////////////////////////////////////////////////
@@ -253,52 +253,48 @@ void * scan_thread () {
 /////////////////////////////////////////////////////////////
 // this thread is responsible for going through the incoming 
 // values and addding it to a buffer 
+fix18 y;
+fix18 y_froze;
 
 void * frozen_thread () { 
 
     while (1) { 
 
         // read values from the FPGA 
-        int y       = *pio_frozen_y_addr;
-        int y_froze = *pio_is_frozen_addr;
-
-        // wait until the buffer is full !!
-        printf(y);
-        printf(y_froze);
-        
-        pthread_mutex_lock(&buffer_mutex);
-
-        // while (buffer_index >= BUFFER_SIZE) {
-        //     pthread_cond_wait(&buffer_not_full, &buffer_mutex);
-        // }
+        y       = *pio_frozen_y_addr;
+        y_froze = *pio_is_frozen_addr;
 
         // Store values in the buffer
         if (buffer_index < BUFFER_SIZE) {
             buffer[buffer_index].is_frozen = y_froze ;
             buffer[buffer_index].frozen_y = y;
 
+
+            if (buffer[buffer_index].is_frozen == 1) { 
+                VGA_rect(100, 10 * buffer[buffer_index].frozen_y + 100, 
+                                100 + 10, 10 * buffer[buffer_index].frozen_y + 110, blue);
+
+            }
+            else { 
+                VGA_rect(100, 10 * buffer[buffer_index].frozen_y + 100, 
+                        100 + 10, 10 * buffer[buffer_index].frozen_y + 110, white);
+            }
+
+
             buffer_index++;
-            // pthread_cond_signal(&buffer_not_empty); // Signal buffer is not empty
-            pthread_mutex_unlock(&buffer_mutex);
 
             *pio_done_send_addr = 1;
             *pio_done_send_addr = 0;
  
-            // printf("buffer content:\n");
-            // for ( i = 0; i < buffer_index; ++i) {  // Only iterate up to the current buffer index
-            //     printf("idx %d: is_frozen = %d, frozen_y = %d\n", i, buffer[i].is_frozen, buffer[i].frozen_y);
-            // }
+
         }
         else { 
             // this means that the buffer is full 
             
             buffer_index = 0;
             clear_buffer();
-            
-            printf("bufferfull");
-            //  printf("\n");
+
         }
-        // pthread_mutex_unlock(&buffer_mutex);
 
     }
 
@@ -346,9 +342,11 @@ void * draw_thread () {
         }
         else {
             // no reset, we will begin drawing
+            *pio_done_send_addr = 1; // signal to the fpga that we don't want to receive new values, until done drawing this buffer.
+
 
             // exclusive access to the buffer
-            pthread_mutex_lock(&buffer_mutex);
+            // pthread_mutex_lock(&buffer_mutex);
 
             // wait for the buffer to be full and then we want to begin to read 
             // buffer_not_empty is a conditional variable
@@ -361,7 +359,7 @@ void * draw_thread () {
             // now we are gpmma be readomg through the data 
 
             // Sort the buffer based on frozen_y coordinates
-            // qsort(buffer, buffer_index, sizeof(yCoordinate), compare_y);
+            qsort(buffer, buffer_index, sizeof(yCoordinate), compare_y);
 
             // Draw the center cell in white 
             // middle element of the sorted buffer, used as sanity check for debugging
@@ -467,9 +465,40 @@ void * draw_thread () {
         
         }
         pthread_mutex_unlock(&buffer_mutex);
+        *pio_done_send_addr = 1;
+
+        *pio_done_send_addr = 0;
+
     }
+    // while (1) { 
+
+    //     // read values from the FPGA 
+    //     y       = *pio_frozen_y_addr;
+    //     y_froze = *pio_is_frozen_addr;
+
+    //     *pio_done_send_addr = 1;
+
+    //     if (y_froze == 1) { 
+    //             VGA_rect(100, 10 * y + 100, 
+    //                             100 + 10, 10 * y + 110, blue);
+
+    //     }
+    //     else { 
+    //             VGA_rect(100, 10 * y + 100, 
+    //                     100 + 10, 10 * y + 110, white);
+    //     }
+
+    //         *pio_done_send_addr = 1;
+
+    //         *pio_done_send_addr = 0;
+
+    // }
 
 }
+
+
+int p;
+
 
 int main(void)
 {
@@ -563,29 +592,53 @@ int main(void)
     *pio_beta_addr  = float2fix18(temp_beta);
     *pio_gamma_addr = float2fix18(temp_gamma);
 
-    pthread_mutex_init(&buffer_mutex, NULL);
+    while (1) { 
+
+        // read values from the FPGA 
+        y       = *pio_frozen_y_addr;
+        y_froze = *pio_is_frozen_addr;
+
+        *pio_done_send_addr = 1;
+
+        if (y_froze == 1) { 
+                VGA_rect(100, 10 * y + 100, 
+                                100 + 10, 10 * y + 110, blue);
+
+        }
+        else { 
+                VGA_rect(100, 10 * y + 100, 
+                        100 + 10, 10 * y + 110, white);
+        }
+
+            *pio_done_send_addr = 1;
+
+            *pio_done_send_addr = 0;
+
+    }
+
+    // pthread_mutex_init(&buffer_mutex, NULL);
 
     // thread identifiers
-    pthread_t thread_frozen, thread_draw, thread_debug;
+    // pthread_t thread_frozen, thread_draw, thread_debug;
 
-    pthread_attr_t attr;
-    pthread_attr_init( &attr );
-    pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_JOINABLE );
+    // pthread_attr_t attr;
+    // pthread_attr_init( &attr );
+    // pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_JOINABLE );
     
      // now the threads
     // pthread_create( &thread_reset, NULL,    reset_thread, NULL );
     // pthread_create( &thread_scan, NULL,     scan_thread,  NULL );
     // pthread_create( &thread_debug, NULL,     debug_thread, NULL );
-    pthread_create( &thread_frozen, NULL,   frozen_thread, NULL );
-    pthread_create( &thread_draw, NULL,     draw_thread, NULL );
+    // pthread_create( &thread_frozen, NULL,   frozen_thread, NULL );
+    // pthread_create( &thread_draw, NULL,     draw_thread, NULL );
 
     // pthread_join( thread_reset, NULL );
     // pthread_join( thread_scan, NULL );
     // pthread_join( thread_debug,  NULL );
-    pthread_join( thread_frozen, NULL );
-    pthread_join( thread_draw,   NULL );
+    // pthread_join( thread_frozen, NULL );
+    // pthread_join( thread_draw,   NULL );
 
-    pthread_mutex_destroy(&buffer_mutex);
+    // pthread_mutex_destroy(&buffer_mutex);
 
 	// printf(buffer_index);
     // for ( i = 0; i < buffer_index; ++i) {  // Only iterate up to the current buffer index
