@@ -75,6 +75,14 @@ char shared_str[64];
 // loop identifiers
 int i,j,k,x,y;
 
+
+// ----- PIO ADDRESS BASES ----- //
+#define PIO_WRITE_ADDRESS       0x00000000 
+#define PIO_CELL_COLOR          0x00000010
+
+volatile unsigned int *pio_write_address = NULL;
+volatile unsigned int *pio_cell_color    = NULL;
+
 ///////////////////////////////////////////////// 
 #define WIDTH 201
 #define HEIGHT 201
@@ -449,6 +457,9 @@ int main(void)
 	char text_top_row[40] = "DE1-SoC ARM/FPGA\0";
 	char text_bottom_row[40] = "Cornell ece5760\0";
 
+    pio_write_address   = (unsigned int *)(h2p_lw_virtual_base +  PIO_WRITE_ADDRESS );
+	pio_cell_color      = (unsigned int *)(h2p_lw_virtual_base +  PIO_CELL_COLOR );
+
 	//VGA_text (34, 1, text_top_row);
 	//VGA_text (34, 2, text_bottom_row);
 	// clear the screen
@@ -469,36 +480,70 @@ int main(void)
                 // handshake ??? not sure if it needs to be here or in the other part 
                 // so actually i think it should be in the other part
                 // for each cell, map pixels to draw onto the vga
-                // int count = 0;
-                if (cells[i][j].s >= 1) { // if frozen, do the cell mappings to m10k memory and set color
-                    for (x = 0; x < 2; x++) {
-                        for (y = 0; y < 2; y++) {
-                        
-                            int cellx = (2*i)+x;
-                            int celly = (2*j)+y;
-                            *write_address = (640*celly)+cellx;
-                            *cell_color = rgb(7,7,7);
+                int count = 0;
+                if (i % 2 == 0) {
+                    if (cells[i][j].s >= 1) { // if frozen, do the cell mappings to m10k memory and set color
+                        for (x = 0; x < 2; x++) {
+                            for (y = 0; y < 2; y++) {
+                                // add some handshake here ?????????s
+                                // send the values over to be written to an m10k block? mapping is already done
+                                int cellx = (2*i)+x;
+                                int celly = (2*j)+y;
+                                *pio_write_address = (640*celly)+cellx;
+                                *pio_cell_color = rgb(7,7,7); // in 8 bit, int 255
 
+                            }
+                            
                         }
-                        
+                    }
+                    else {
+                        for (x = 0; x < 2; x++) {
+                            for (y = 0; y < 2; y++) {
+                                // add some handshake here ?????????
+                                int cellx = (2*i)+x;
+                                int celly = (2*j)+y;
+                                *pio_write_address = (640*celly)+cellx;
+                                *pio_cell_color = rgb(0,0,0); // int 0
+
+                            }
+                            
+                        }
                     }
                 }
                 else {
-                    for (x = 0; x < 2; x++) {
-                        for (y = 0; y < 2; y++) {
-                            // add some handshake here ?????????
-                            int cellx = (2*i)+x;
-                            int celly = (2*j)+y;
-                            *write_address = (640*celly)+cellx;
-                            *cell_color = rgb(0,0,0);
+                    if (cells[i][j].s >= 1) { // if frozen, do the cell mappings to m10k memory and set color
+                        for (x = 0; x < 2; x++) {
+                            for (y = 0; y < 2; y++) {
+                                // add some handshake here ?????????s
+                                // send the values over to be written to an m10k block? mapping is already done
+                                int cellx = (2*i)+x;
+                                int celly = (2*j)+y+1;
+                                *pio_write_address = (640*celly)+cellx;
+                                *pio_cell_color = rgb(7,7,7); // int 255
 
+                            }
+                            
                         }
-                        
+                    }
+                    else {
+                        for (x = 0; x < 2; x++) {
+                            for (y = 0; y < 2; y++) {
+                                // add some handshake here ?????????
+                                int cellx = (2*i)+x;
+                                int celly = (2*j)+y+1;
+                                *pio_write_address = (640*celly)+cellx;
+                                *pio_cell_color = rgb(0,0,0); // int 0
+
+                            }
+                            
+                        }
                     }
                 }
+                
             }
         }
     }
+}
 	
 	
 
@@ -522,7 +567,7 @@ int main(void)
     // VGA_text (10, 2, text_bottom_row);
     
 	//} // end while(1)
-} // end main
+ // end main
 
 
 void VGA_cell(int x1, int y1, int x2, int y2, short pixel_color)
