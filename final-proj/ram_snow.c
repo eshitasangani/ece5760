@@ -20,8 +20,8 @@
 /* Cyclone V FPGA devices */
 #define HW_REGS_BASE          0xff200000
 //#define HW_REGS_SPAN        0x00200000 
-// #define HW_REGS_SPAN          0x00005000  // WHAT WE AHD B4
-#define HW_REGS_SPAN          0x10000000 
+#define HW_REGS_SPAN          0x00005000  // WHAT WE AHD B4
+// #define HW_REGS_SPAN          0x10000000 
 
 #define FPGA_ONCHIP_BASE      0xC8000000
 //#define FPGA_ONCHIP_END       0xC803FFFF
@@ -35,7 +35,13 @@
 
 // SRAM FOR SYNCRHONIZXATIOBN!! 
 
-#define FPGA_SRAM_BASE      0x08000000
+// h2f_axi_master; scratch RAM at 0xC0000000
+// issue from last time 
+#define FPGA_SRAM_BASE      0xC8000000
+#define FPGA_SRAM_SPAN      0x00002000
+#define ANALYZER_OFFSET     0x00000000
+#define CONTROL_OFFSET      0x00001000
+
 
 //// BASE ADDRESSES FOR PIO ADDRESSES ////
 #define PIO_ALPHA_BASE      0x100
@@ -139,7 +145,6 @@ int *shared_ptr;
 int shared_time;
 int shared_note;
 char shared_str[64];
-
 
 int y_is_frozen;
 int y_frozen_coor;
@@ -253,7 +258,16 @@ int main(void)
         close( fd );
         return(1);
     }
-    
+
+    // non lightweight bus 
+    //  RAM FPGA parameter/analyzer addrs 
+	h2p_virtual_base = mmap( NULL, FPGA_SRAM_SPAN, ( PROT_READ | PROT_WRITE ), MAP_SHARED, fd, FPGA_SRAM_BASE); 	
+	
+	if( h2p_virtual_base == MAP_FAILED ) {
+		printf( "ERROR: mmap3() failed...\n" );
+		close( fd );
+		return(1);
+	}
 
     // === get VGA char addr =====================
     // get virtual addr that maps to physical
@@ -267,7 +281,6 @@ int main(void)
     // Get the address that maps to the FPGA LED control 
     vga_char_ptr =(unsigned int *)(vga_char_virtual_base);
 
-    
 
     // === get VGA pixel addr ====================
     // get virtual addr that maps to physical
@@ -293,7 +306,7 @@ int main(void)
     pio_reset_to_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_TO_BASE );
     pio_done_send_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_DONE_SEND_BASE );
     // GET THE ADDRESS THAT MAPS TO THE RAM BUFFERS 
-    sram_ptr = (unsigned int *)(h2p_lw_virtual_base + FPGA_SRAM_BASE);
+    sram_ptr = (unsigned int *)(h2p_lw_virtual_base);
 
     /// VISUALIZE ON THE SCREEN /// 
 
