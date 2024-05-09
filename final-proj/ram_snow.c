@@ -15,6 +15,7 @@
 #include <sys/mman.h>
 #include <sys/time.h> 
 #include <pthread.h>
+#include <math.h>
 #include "address_map_arm_brl4.h"
 
 /* Cyclone V FPGA devices */
@@ -23,11 +24,11 @@
 #define HW_REGS_SPAN          0x00005000  // WHAT WE AHD B4
 // #define HW_REGS_SPAN          0x10000000 
 
-#define FPGA_ONCHIP_BASE      0xC8000000
+#define FPGA_SDRAM_BASE      0xC0000000
 //#define FPGA_ONCHIP_END       0xC803FFFF
 // modified for 640x480
 // #define FPGA_ONCHIP_SPAN      0x00040000
-#define FPGA_ONCHIP_SPAN      0x00080000
+#define FPGA_SDRAM_SPAN      0x04000000
 
 #define FPGA_CHAR_BASE        0xC9000000 
 #define FPGA_CHAR_END         0xC9001FFF
@@ -39,8 +40,6 @@
 // issue from last time 
 #define FPGA_SRAM_BASE      0xC8000000
 #define FPGA_SRAM_SPAN      0x00002000
-#define ANALYZER_OFFSET     0x00000000
-#define CONTROL_OFFSET      0x00001000
 
 
 //// BASE ADDRESSES FOR PIO ADDRESSES ////
@@ -97,10 +96,13 @@ typedef signed int fix18 ;
 #define int2fix28(a) ((a)<<18);
 
 // pixel macro
+// 16 bit color
+// pixel macro -- shift-left in the pixel pointer is specified in the Video Core Manual
+// probably becuase the DMA addressing is all in bytes
 #define VGA_PIXEL(x,y,color) do{\
-    char  *pixel_ptr ;\
-    pixel_ptr = (char *)vga_pixel_ptr + ((y)<<10) + (x) ;\
-    *(char *)pixel_ptr = (color);\
+int *pixel_ptr ;\
+pixel_ptr = (int*)((char *)vga_pixel_ptr + (((y)*640+(x))<<1)) ; \
+*(short *)pixel_ptr = (color);\
 } while(0)
 
 // 16-bit primary colors
@@ -262,7 +264,6 @@ int main(void)
     // non lightweight bus 
     //  RAM FPGA parameter/analyzer addrs 
 	h2p_virtual_base = mmap( NULL, FPGA_SRAM_SPAN, ( PROT_READ | PROT_WRITE ), MAP_SHARED, fd, FPGA_SRAM_BASE); 	
-	
 	if( h2p_virtual_base == MAP_FAILED ) {
 		printf( "ERROR: mmap3() failed...\n" );
 		close( fd );
@@ -284,7 +285,7 @@ int main(void)
 
     // === get VGA pixel addr ====================
     // get virtual addr that maps to physical
-    vga_pixel_virtual_base = mmap( NULL, FPGA_ONCHIP_SPAN, (    PROT_READ | PROT_WRITE ), MAP_SHARED, fd,           FPGA_ONCHIP_BASE);  
+    vga_pixel_virtual_base = mmap( NULL, FPGA_SDRAM_SPAN, (    PROT_READ | PROT_WRITE ), MAP_SHARED, fd, FPGA_SDRAM_BASE);  
     if( vga_pixel_virtual_base == MAP_FAILED ) {
         printf( "ERROR: mmap3() failed...\n" );
         close( fd );
@@ -306,7 +307,7 @@ int main(void)
     pio_reset_to_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_RESET_TO_BASE );
     pio_done_send_addr = (unsigned int *)(h2p_lw_virtual_base +  PIO_DONE_SEND_BASE );
     // GET THE ADDRESS THAT MAPS TO THE RAM BUFFERS 
-    sram_ptr = (unsigned int *)(h2p_lw_virtual_base);
+    sram_ptr = (unsigned int *)(h2p_virtual_base);
 
     /// VISUALIZE ON THE SCREEN /// 
 
@@ -318,13 +319,14 @@ int main(void)
     char text_top_row[40]    = "DE1-SoC ARM/FPGA\0";
     char text_bottom_row[40] = "Cornell ece5760\0";
 
-    // VGA_box (0, 0, 639, 479, 0x0000);
+    VGA_box(0,0,639,479,black);
+    
 
     VGA_text (34, 1, text_top_row);
     VGA_text (34, 2, text_bottom_row);
-    VGA_text (34, 3, text_x);
-    VGA_text (34, 4, text_y);
-    VGA_text (34, 5, text_z);
+    // VGA_text (34, 3, text_x);
+    // VGA_text (34, 4, text_y);
+    // VGA_text (34, 5, text_z);
 
     // Initial values to send to fpga 
     *pio_alpha_addr = float2fix18(temp_alpha);
@@ -333,47 +335,63 @@ int main(void)
     
     int i; // loop identifier
     while (1) { 
-       
-
-        // if the fpga signals that we are done with one iteration
-        if(*(sram_ptr+1) == 1){
-        // every cell in column has a value 
-        // draw the whole iteration here 
-
-        for (i = 0; i < 11; i ++) { 
-
-            if (buffer[i].is_frozen == 1) { 
-                VGA_rect(100, 10 * buffer[i].frozen_y + 100, 
-                                100 + 10, 10 * buffer[i].frozen_y + 110, blue);
-            }
-            else { 
-                    VGA_rect(100, 10 * buffer[i].frozen_y + 100, 
-                            100 + 10, 10 * buffer[i].frozen_y + 110, white);
-            }
-
+        if(*pio_reset_to_addr){
+            // update pio pointers w the initial values 
+            *(pio_alpha_addr) = float2fix18(temp_alpha);
+            *(pio_beta_addr)  = float2fix18(temp_beta);
+            *(pio_gamma_addr) = float2fix18(temp_gamma);
+            *(sram_ptr) = 1;
+            *(sram_ptr+1) = 0;
         }
-    
-        }
+        else{
+            // if the fpga signals that we are done with one iteration
+            if(*(sram_ptr+1) == 1){
+                // every cell in column has a value 
+                // draw the whole iteration here 
+                
+                printf("ONE ITER DONE \n");
+                
+                for (i = 0; i < 11; i++) { 
 
-        else {
-            // wait for the FPGA value to be valid
-            while(*(sram_ptr) == 1); // 0th bit = synch signal
+                    printf("buffer[%d]: %d; ", i, buffer[i].is_frozen);
+                    printf("%d \n", buffer[i].frozen_y);
 
-            // read values from the FPGA & add to the buffer
-            yCoordinate coord; 
+                    if (buffer[i].is_frozen == 1) { 
+                        VGA_box(100, 10 * buffer[i].frozen_y + 100, 
+                                        100 + 10, 10 * buffer[i].frozen_y + 110, blue);
 
-            coord.is_frozen = *pio_is_frozen_addr;
-            coord.frozen_y  = *pio_frozen_y_addr; 
-
-            buffer[buffer_index] = coord; 
-            buffer_index++;
-
-            *(sram_ptr) = 1; // tell the FPGA we are ready for the next value
-        }
-
+                    }
+                    else { 
+                        VGA_box(100, 10 * buffer[i].frozen_y + 100, 
+                                    100 + 10, 10 * buffer[i].frozen_y + 110, white);
+                    }
+                }
+                usleep(15000);
+                buffer_index = 0;
+                *(sram_ptr+1) = 0;
         
+            }
 
+            else {
+                // wait for the FPGA value to be valid
+                while(*(sram_ptr) == 1) {
+                }; // 0th bit = synch signal
 
+                // read values from the FPGA & add to the buffer
+                yCoordinate coord; 
+
+                coord.is_frozen = *pio_is_frozen_addr;
+                coord.frozen_y  = *pio_frozen_y_addr; 
+                printf("is frozen: %d; ", coord.is_frozen);
+                printf("frozen y: %d \n", coord.frozen_y);
+
+                buffer[buffer_index] = coord; 
+                buffer_index++;
+
+                *(sram_ptr) = 1; // tell the FPGA we are ready for the next value
+            }
+        }
+        
     }
 
     return 0;
@@ -392,23 +410,22 @@ void VGA_cell(int x1, int y1, int x2, int y2, short pixel_color)
     VGA_PIXEL(x2,y2,pixel_color);
 
 }
-
 /****************************************************************************************
  * Subroutine to send a string of text to the VGA monitor 
 ****************************************************************************************/
 void VGA_text(int x, int y, char * text_ptr)
 {
-    volatile char * character_buffer = (char *) vga_char_ptr ;  // VGA character buffer
-    int offset;
-    /* assume that the text string fits on one line */
-    offset = (y << 7) + x;
-    while ( *(text_ptr) )
-    {
-        // write to the character buffer
-        *(character_buffer + offset) = *(text_ptr); 
-        ++text_ptr;
-        ++offset;
-    }
+  	volatile char * character_buffer = (char *) vga_char_ptr ;	// VGA character buffer
+	int offset;
+	/* assume that the text string fits on one line */
+	offset = (y << 7) + x;
+	while ( *(text_ptr) )
+	{
+		// write to the character buffer
+		*(character_buffer + offset) = *(text_ptr);	
+		++text_ptr;
+		++offset;
+	}
 }
 
 /****************************************************************************************
@@ -416,16 +433,16 @@ void VGA_text(int x, int y, char * text_ptr)
 ****************************************************************************************/
 void VGA_text_clear()
 {
-    volatile char * character_buffer = (char *) vga_char_ptr ;  // VGA character buffer
-    int offset, x, y;
-    for (x=0; x<79; x++){
-        for (y=0; y<59; y++){
-    /* assume that the text string fits on one line */
-            offset = (y << 7) + x;
-            // write to the character buffer
-            *(character_buffer + offset) = ' ';     
-        }
-    }
+  	volatile char * character_buffer = (char *) vga_char_ptr ;	// VGA character buffer
+	int offset, x, y;
+	for (x=0; x<79; x++){
+		for (y=0; y<59; y++){
+	/* assume that the text string fits on one line */
+			offset = (y << 7) + x;
+			// write to the character buffer
+			*(character_buffer + offset) = ' ';		
+		}
+	}
 }
 
 /****************************************************************************************
@@ -435,68 +452,270 @@ void VGA_text_clear()
 
 void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
 {
-    char  *pixel_ptr ; 
-    int row, col;
+	char  *pixel_ptr ; 
+	int row, col;
 
-    /* check and fix box coordinates to be valid */
-    if (x1>639) x1 = 639;
-    if (y1>479) y1 = 479;
-    if (x2>639) x2 = 639;
-    if (y2>479) y2 = 479;
-    if (x1<0) x1 = 0;
-    if (y1<0) y1 = 0;
-    if (x2<0) x2 = 0;
-    if (y2<0) y2 = 0;
-    if (x1>x2) SWAP(x1,x2);
-    if (y1>y2) SWAP(y1,y2);
-    for (row = y1; row <= y2; row++)
-        for (col = x1; col <= x2; ++col)
-        {
-            //640x480
-            pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
-            // set pixel color
-            *(char *)pixel_ptr = pixel_color;       
-        }
+	/* check and fix box coordinates to be valid */
+	if (x1>639) x1 = 639;
+	if (y1>479) y1 = 479;
+	if (x2>639) x2 = 639;
+	if (y2>479) y2 = 479;
+	if (x1<0) x1 = 0;
+	if (y1<0) y1 = 0;
+	if (x2<0) x2 = 0;
+	if (y2<0) y2 = 0;
+	if (x1>x2) SWAP(x1,x2);
+	if (y1>y2) SWAP(y1,y2);
+	for (row = y1; row <= y2; row++)
+		for (col = x1; col <= x2; ++col)
+		{
+			//640x480
+			//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
+			// set pixel color
+			//*(char *)pixel_ptr = pixel_color;	
+			VGA_PIXEL(col,row,pixel_color);	
+		}
 }
 
 /****************************************************************************************
- * Draw an UNFILLED rectangle on the VGA monitor 
+ * Draw a outline rectangle on the VGA monitor 
 ****************************************************************************************/
+#define SWAP(X,Y) do{int temp=X; X=Y; Y=temp;}while(0) 
+
 void VGA_rect(int x1, int y1, int x2, int y2, short pixel_color)
 {
-    char  *pixel_ptr ; 
-    int row, col;
+	char  *pixel_ptr ; 
+	int row, col;
 
-    /* check and fix box coordinates to be valid */
-    if (x1>639) x1 = 639;
-    if (y1>479) y1 = 479;
-    if (x2>639) x2 = 639;
-    if (y2>479) y2 = 479;
-    if (x1<0) x1 = 0;
-    if (y1<0) y1 = 0;
-    if (x2<0) x2 = 0;
-    if (y2<0) y2 = 0;
-    if (x1>x2) SWAP(x1,x2);
-    if (y1>y2) SWAP(y1,y2);
-    for (row = y1; row <= y2; row++){
-        if (row == y1 || row == y2){
-            for (col = x1; col <= x2; ++col)
-            {
-                //640x480
-                pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
-                // set pixel color
-                *(char *)pixel_ptr = pixel_color;       
-            }
-        }
-        else{
-            //640x480
-            pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + x1 ;
-            // set pixel color
-            *(char *)pixel_ptr = pixel_color;   
-            //640x480
-            pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + x2 ;
-            // set pixel color
-            *(char *)pixel_ptr = pixel_color;   
-        }
-    }
+	/* check and fix box coordinates to be valid */
+	if (x1>639) x1 = 639;
+	if (y1>479) y1 = 479;
+	if (x2>639) x2 = 639;
+	if (y2>479) y2 = 479;
+	if (x1<0) x1 = 0;
+	if (y1<0) y1 = 0;
+	if (x2<0) x2 = 0;
+	if (y2<0) y2 = 0;
+	if (x1>x2) SWAP(x1,x2);
+	if (y1>y2) SWAP(y1,y2);
+	// left edge
+	col = x1;
+	for (row = y1; row <= y2; row++){
+		//640x480
+		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
+		// set pixel color
+		//*(char *)pixel_ptr = pixel_color;	
+		VGA_PIXEL(col,row,pixel_color);		
+	}
+		
+	// right edge
+	col = x2;
+	for (row = y1; row <= y2; row++){
+		//640x480
+		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
+		// set pixel color
+		//*(char *)pixel_ptr = pixel_color;	
+		VGA_PIXEL(col,row,pixel_color);		
+	}
+	
+	// top edge
+	row = y1;
+	for (col = x1; col <= x2; ++col){
+		//640x480
+		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
+		// set pixel color
+		//*(char *)pixel_ptr = pixel_color;	
+		VGA_PIXEL(col,row,pixel_color);
+	}
+	
+	// bottom edge
+	row = y2;
+	for (col = x1; col <= x2; ++col){
+		//640x480
+		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
+		// set pixel color
+		//*(char *)pixel_ptr = pixel_color;
+		VGA_PIXEL(col,row,pixel_color);
+	}
+}
+
+/****************************************************************************************
+ * Draw a horixontal line on the VGA monitor 
+****************************************************************************************/
+#define SWAP(X,Y) do{int temp=X; X=Y; Y=temp;}while(0) 
+
+void VGA_Hline(int x1, int y1, int x2, short pixel_color)
+{
+	char  *pixel_ptr ; 
+	int row, col;
+
+	/* check and fix box coordinates to be valid */
+	if (x1>639) x1 = 639;
+	if (y1>479) y1 = 479;
+	if (x2>639) x2 = 639;
+	if (x1<0) x1 = 0;
+	if (y1<0) y1 = 0;
+	if (x2<0) x2 = 0;
+	if (x1>x2) SWAP(x1,x2);
+	// line
+	row = y1;
+	for (col = x1; col <= x2; ++col){
+		//640x480
+		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
+		// set pixel color
+		//*(char *)pixel_ptr = pixel_color;	
+		VGA_PIXEL(col,row,pixel_color);		
+	}
+}
+
+/****************************************************************************************
+ * Draw a vertical line on the VGA monitor 
+****************************************************************************************/
+#define SWAP(X,Y) do{int temp=X; X=Y; Y=temp;}while(0) 
+
+void VGA_Vline(int x1, int y1, int y2, short pixel_color)
+{
+	char  *pixel_ptr ; 
+	int row, col;
+
+	/* check and fix box coordinates to be valid */
+	if (x1>639) x1 = 639;
+	if (y1>479) y1 = 479;
+	if (y2>479) y2 = 479;
+	if (x1<0) x1 = 0;
+	if (y1<0) y1 = 0;
+	if (y2<0) y2 = 0;
+	if (y1>y2) SWAP(y1,y2);
+	// line
+	col = x1;
+	for (row = y1; row <= y2; row++){
+		//640x480
+		//pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
+		// set pixel color
+		//*(char *)pixel_ptr = pixel_color;	
+		VGA_PIXEL(col,row,pixel_color);			
+	}
+}
+
+
+/****************************************************************************************
+ * Draw a filled circle on the VGA monitor 
+****************************************************************************************/
+
+void VGA_disc(int x, int y, int r, short pixel_color)
+{
+	char  *pixel_ptr ; 
+	int row, col, rsqr, xc, yc;
+	
+	rsqr = r*r;
+	
+	for (yc = -r; yc <= r; yc++)
+		for (xc = -r; xc <= r; xc++)
+		{
+			col = xc;
+			row = yc;
+			// add the r to make the edge smoother
+			if(col*col+row*row <= rsqr+r){
+				col += x; // add the center point
+				row += y; // add the center point
+				//check for valid 640x480
+				if (col>639) col = 639;
+				if (row>479) row = 479;
+				if (col<0) col = 0;
+				if (row<0) row = 0;
+				//pixel_ptr = (char *)vga_pixel_ptr + (row<<10) + col ;
+				// set pixel color
+				//*(char *)pixel_ptr = pixel_color;
+				VGA_PIXEL(col,row,pixel_color);	
+			}
+					
+		}
+}
+// =============================================
+// === Draw a line
+// =============================================
+//plot a line 
+//at x1,y1 to x2,y2 with color 
+//Code is from David Rodgers,
+//"Procedural Elements of Computer Graphics",1985
+void VGA_line(int x1, int y1, int x2, int y2, short c) {
+	int e;
+	signed int dx,dy,j, temp;
+	signed int s1,s2, xchange;
+     signed int x,y;
+	char *pixel_ptr ;
+	
+	/* check and fix line coordinates to be valid */
+	if (x1>639) x1 = 639;
+	if (y1>479) y1 = 479;
+	if (x2>639) x2 = 639;
+	if (y2>479) y2 = 479;
+	if (x1<0) x1 = 0;
+	if (y1<0) y1 = 0;
+	if (x2<0) x2 = 0;
+	if (y2<0) y2 = 0;
+        
+	x = x1;
+	y = y1;
+	
+	//take absolute value
+	if (x2 < x1) {
+		dx = x1 - x2;
+		s1 = -1;
+	}
+
+	else if (x2 == x1) {
+		dx = 0;
+		s1 = 0;
+	}
+
+	else {
+		dx = x2 - x1;
+		s1 = 1;
+	}
+
+	if (y2 < y1) {
+		dy = y1 - y2;
+		s2 = -1;
+	}
+
+	else if (y2 == y1) {
+		dy = 0;
+		s2 = 0;
+	}
+
+	else {
+		dy = y2 - y1;
+		s2 = 1;
+	}
+
+	xchange = 0;   
+
+	if (dy>dx) {
+		temp = dx;
+		dx = dy;
+		dy = temp;
+		xchange = 1;
+	} 
+
+	e = ((int)dy<<1) - dx;  
+	 
+	for (j=0; j<=dx; j++) {
+		//video_pt(x,y,c); //640x480
+		//pixel_ptr = (char *)vga_pixel_ptr + (y<<10)+ x; 
+		// set pixel color
+		//*(char *)pixel_ptr = c;
+		VGA_PIXEL(x,y,c);			
+		 
+		if (e>=0) {
+			if (xchange==1) x = x + s1;
+			else y = y + s2;
+			e = e - ((int)dx<<1);
+		}
+
+		if (xchange==1) y = y + s2;
+		else x = x + s1;
+
+		e = e + ((int)dy<<1);
+	}
 }
