@@ -90,8 +90,21 @@ int i,j,k,x,y;
 volatile unsigned int *pio_reset_to_hps = NULL;
 
 ///////////////////////////////////////////////// 
-#define WIDTH 301
-#define HEIGHT 301 
+#define WIDTH 639
+#define HEIGHT 479 
+
+#define red  (0+(0<<5)+(31<<11))
+#define dark_red (0+(0<<5)+(15<<11))
+#define green (0+(63<<5)+(0<<11))
+#define dark_green (0+(31<<5)+(0<<11))
+#define blue (31+(0<<5)+(0<<11))
+#define dark_blue (15+(0<<5)+(0<<11))
+#define yellow (0+(63<<5)+(31<<11))
+#define cyan (31+(63<<5)+(0<<11))
+#define magenta (31+(0<<5)+(31<<11))
+#define black (0x0000)
+#define gray (15+(31<<5)+(51<<11))
+#define white (0xffff)
 
 // #define ALPHA 1.0
 // #define BETA 0.8
@@ -126,6 +139,14 @@ short color;
 	*(char *)pixel_ptr = (color);\
 } while(0)
 
+float init_alpha = 1.0;
+float init_beta = 0.8;
+float old_beta;
+float init_gamma = 0.01;
+int set; 
+int init_reset;
+int reset_beta = 0;
+int paused = 0; 
 
 // Get neighbors for a specific coordinate
 int get_num_neighbors(Cell* neighbors[], int x, int y) {
@@ -171,6 +192,16 @@ int get_num_neighbors(Cell* neighbors[], int x, int y) {
     return count;
 }
 
+void initialize_remaining_grid(){
+	for ( i = 0; i < WIDTH; i++) {
+        for ( j = 0; j < HEIGHT; j++) {
+			if (cells[i][j].u == old_beta){
+				cells[i][j].u = init_beta;
+			}
+        }
+    }
+}
+
 void initialize_grid() {
     for ( i = 0; i < WIDTH; i++) {
         for ( j = 0; j < HEIGHT; j++) {
@@ -183,28 +214,30 @@ void initialize_grid() {
         }
     }
     // Set the center cell
-    cells[ (WIDTH - 1 ) / 2 ] [(HEIGHT - 1 ) / 2].s = 1.0;
-    cells[ (WIDTH - 1 ) / 2 ] [ (HEIGHT - 1 ) / 2].is_receptive = true;
+    cells[ (WIDTH - 1 ) / 6 ] [ (HEIGHT - 1 ) / 2].s = 1.0;
+    cells[ (WIDTH - 1 ) / 6 ] [ (HEIGHT - 1 ) / 2].is_receptive = true;
 
-    cells[10][10].s = 1.0;
-    cells[10][10].is_receptive = true;
-    cells[200][10].s = 1.0;
-    cells[200][10].is_receptive = true;
-    cells[200][300].s = 1.0;
-    cells[200][300].is_receptive = true;
-    cells[10][200].s = 1.0;
-    cells[10][200].is_receptive = true;
+	// cells[ (WIDTH - 1 ) / 6 ] [ (HEIGHT - 1 ) / 6].s = 1.0;
+    // cells[ (WIDTH - 1 ) / 6 ] [ (HEIGHT - 1 ) / 6].is_receptive = true;
 
+    // cells[10][10].s = 1.0;
+    // cells[10][10].is_receptive = true;
+    // cells[200][10].s = 1.0;
+    // cells[200][10].is_receptive = true;
+    // cells[200][300].s = 1.0;
+    // cells[200][300].is_receptive = true;
+    // cells[10][200].s = 1.0;
+    // cells[10][200].is_receptive = true;
+	// cells[200][200].s = 1.0;
+    // cells[200][200].is_receptive = true;
+	// cells[600][200].s = 1.0;
+    // cells[600][200].is_receptive = true;
 }
 
 ///////////////////////////////////////////////////////////////
 // THREADS ////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////
-float init_alpha = 0.1;
-float init_beta = 0.8;
-float init_gamma = 0.1;
-int set; 
-int paused = 0; 
+
 ///////////////////////////////////////////////////////////////
 // reset thread  // 
 ///////////////////////////////////////////////////////////////
@@ -214,7 +247,8 @@ void * reset_thread() {
 	while (1) {
 		if(*pio_reset_to_hps)
 		{ 
-			VGA_box (0, 0, 639, 479, 0x0000);
+			// VGA_box (0, 0, 639, 479, 0x0000);
+			init_reset = 1;
 		}
 
 	}
@@ -238,31 +272,35 @@ void * scan_thread () {
 			case 0:  // changing alpha 
 
 				printf("Enter alpha: ");
-				scanf("%f", init_alpha);
+				scanf("%f", &init_alpha);
 			
 			break;
 
 			case 1:  // changing beta 
 
 				printf("Enter beta: ");
-				scanf("%f", init_beta);
+				old_beta = init_beta;
+				scanf("%f", &init_beta);
+				reset_beta = 1;
 				
 			break; 
 
 			case 2:  // changing gamma 
 
 				printf("Enter gamma: ");
-				scanf("%f", init_gamma);
+				scanf("%f", &init_gamma);
 
 			break; 
 
 			case 3:  // setting paused 
 
 				printf("Pause/Play: ");
-				scanf("%f", paused);
+				scanf("%i", &paused);
+			break;
 
 			case 4: // clear screen 
-				VGA_box (0, 0, 639, 479, 0x0000);
+				// VGA_box (0, 0, 639, 479, 0x0000);
+				init_reset = 1;
 
 			break;
 
@@ -348,12 +386,27 @@ void one_iter() {
 ///////////////////////////////////////////////////////////////
 
 void * draw_thread () {
+	int iters = 0;
 	initialize_grid();
+	while(1){
+		// if (iters >= 200){
+		// 	// stop
+		// 	return 1;
+		// }
+		
+		if (init_reset) { 
+			init_reset = 0;
+			VGA_box (0, 0, 639, 479, 0x0000);
+			initialize_grid();
+			iters = 0;
+		}
 
-	for (x = 0; x < 145; x++) { 
+		if (reset_beta){
+			reset_beta = 0;
+			initialize_remaining_grid();
+		}
 
-		if (!paused) {  // if paused is 0 = means we can continue calculating and drawing 
-
+		if (paused == 0){
 			one_iter(); // does the actual calculation 
 			for (i = 0; i < WIDTH; i++) {
 				for (j = 0; j < HEIGHT; j++) {
@@ -361,39 +414,180 @@ void * draw_thread () {
 
 					if (i % 2 == 0) { // even columns 
 						if (cells[i][j].s >= 1) { 
-							for (x = 0; x < 2; x++) {
-								for (y = 0; y < 2; y++) {
+							
+							// top left
+							if (i < ((WIDTH-1) / 2) && j < ((HEIGHT-1)/2)){
+								for (x = 0; x < 2; x++) {
+									for (y = 0; y < 2; y++) {
 
-									int cellx = (2*i)+x;
-									int celly = (2*j)+y;
-									VGA_disc(cellx, celly, 0, 0xffff);
+										int cellx = (2*i)+x - 100;
+										int celly = (2*j)+y - 100;
+										VGA_disc(cellx, celly, 0, green);
 
+									}
 								}
 							}
+
+							// bottom left
+							if (i < ((WIDTH-1) / 2) && j >= ((HEIGHT-1)/2)){
+								for (x = 0; x < 2; x++) {
+									for (y = 0; y < 2; y++) {
+
+										int cellx = (2*i)+x - 100;
+										int celly = (2*j)+y - 100;
+										VGA_disc(cellx, celly, 0, blue);
+
+									}
+								}
+							}
+
+							// top right
+							if (i >= ((WIDTH-1) / 2) && j < ((HEIGHT-1)/2)){
+								for (x = 0; x < 2; x++) {
+									for (y = 0; y < 2; y++) {
+
+										int cellx = (2*i)+x - 100;
+										int celly = (2*j)+y - 100;
+										VGA_disc(cellx, celly, 0, dark_blue);
+
+									}
+								}
+							}
+
+							// bottom right
+							if (i >= ((WIDTH-1) / 2) && j >= ((HEIGHT-1)/2)){
+								for (x = 0; x < 2; x++) {
+									for (y = 0; y < 2; y++) {
+
+										int cellx = (2*i)+x - 100;
+										int celly = (2*j)+y - 100;
+										VGA_disc(cellx, celly, 0, magenta);
+
+									}
+								}
+							}
+							
 						}
 
-					}
+					} // end even
 					else { // odd columns
 						if (cells[i][j].s >= 1) { 
-							for (x = 0; x < 2; x++) {
-								for (y = 0; y < 2; y++) {
-									int cellx = (2*i)+x;
-									int celly = (2*j)+y+1;
-									VGA_disc(cellx, celly, 0, 0xffff);
+							// top left
+							if (i < ((WIDTH-1) / 2) && j < ((HEIGHT-1)/2)){
+								for (x = 0; x < 2; x++) {
+									for (y = 0; y < 2; y++) {
 
+										int cellx = (2*i)+x - 100;
+										int celly = (2*j)+y+1 - 100;
+										VGA_disc(cellx, celly, 0, green);
+
+									}
 								}
-								
+							}
+
+							// bottom left
+							if (i < ((WIDTH-1) / 2) && j >= ((HEIGHT-1)/2)){
+								for (x = 0; x < 2; x++) {
+									for (y = 0; y < 2; y++) {
+
+										int cellx = (2*i)+x - 100;
+										int celly = (2*j)+y+1 - 100;
+										VGA_disc(cellx, celly, 0, blue);
+
+									}
+								}
+							}
+
+							// top right
+							if (i >= ((WIDTH-1) / 2) && j < ((HEIGHT-1)/2)){
+								for (x = 0; x < 2; x++) {
+									for (y = 0; y < 2; y++) {
+
+										int cellx = (2*i)+x - 100;
+										int celly = (2*j)+y+1 - 100;
+										VGA_disc(cellx, celly, 0, dark_blue);
+
+									}
+								}
+							}
+
+							// bottom right
+							if (i >= ((WIDTH-1) / 2) && j >= ((HEIGHT-1)/2)){
+								for (x = 0; x < 2; x++) {
+									for (y = 0; y < 2; y++) {
+
+										int cellx = (2*i)+x - 100;
+										int celly = (2*j)+y+1 - 100;
+										VGA_disc(cellx, celly, 0, magenta);
+
+									}
+								}
 							}
 						}
-
-					}
+					} // end odd 
 					
-				}
-        	}
+				} // end height for
+			} // end width for
 
+			iters++;
 		}
+
+		
+	} // end while
+	// for (x = 0; x < 145; x++) { 
+
+	// 	if (!paused) {  // if paused is 0 = means we can continue calculating and drawing 
+
+	// 		if (init_reset) { 
+	// 			initialize_grid();
+	// 		}
+
+	// 		else { 
+	// 			one_iter(); // does the actual calculation 
+	// 			for (i = 0; i < WIDTH; i++) {
+	// 				for (j = 0; j < HEIGHT; j++) {
+	// 					int count = 0;
+
+	// 					if (i % 2 == 0) { // even columns 
+	// 						if (cells[i][j].s >= 1) { 
+	// 							for (x = 0; x < 2; x++) {
+	// 								for (y = 0; y < 2; y++) {
+
+	// 									int cellx = (2*i)+x;
+	// 									int celly = (2*j)+y;
+	// 									VGA_disc(cellx, celly, 0, 0xffff);
+
+	// 								}
+	// 							}
+	// 						}
+
+	// 					}
+	// 					else { // odd columns
+	// 						if (cells[i][j].s >= 1) { 
+	// 							for (x = 0; x < 2; x++) {
+	// 								for (y = 0; y < 2; y++) {
+	// 									int cellx = (2*i)+x;
+	// 									int celly = (2*j)+y+1;
+	// 									VGA_disc(cellx, celly, 0, 0xffff);
+
+	// 								}
+									
+	// 							}
+	// 						}
+
+	// 					}
+						
+	// 				}
+	// 			}
+
+	// 		}
+
+	// 	}
+	// 	else { 
+	// 		while (paused) {};
+	// 	}
         
-    }
+    // }
 
 }
 
@@ -469,6 +663,7 @@ int main(void)
 	pio_reset_to_hps = (unsigned int *)(h2p_lw_virtual_base + PIO_RESET_TO_HPS_BASE);
 
 	// ===========================================
+	VGA_box (0, 0, 639, 479, 0x0000);
 
 	// thread identifiers
    	pthread_t thread_scan, thread_draw, thread_reset;
