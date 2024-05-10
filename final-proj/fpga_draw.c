@@ -14,6 +14,7 @@
 #include <sys/shm.h> 
 #include <sys/mman.h>
 #include <sys/time.h> 
+#include "address_map_arm_brl4.h"
 
 /* Cyclone V FPGA devices */
 #define HW_REGS_BASE          0xff200000
@@ -60,6 +61,10 @@ void *vga_pixel_virtual_base;
 // character buffer
 volatile unsigned int * vga_char_ptr = NULL ;
 void *vga_char_virtual_base;
+
+// RAM FPGA command buffer
+volatile unsigned int * sram_ptr = NULL ;
+void *sram_virtual_base;
 
 // /dev/mem file id
 int fd;
@@ -400,9 +405,9 @@ int main(void)
 
 	// === shared memory =======================
 	// with video process
-	shared_mem_id = shmget(mem_key, 100, IPC_CREAT | 0666);
- 	//shared_mem_id = shmget(mem_key, 100, 0666);
-	shared_ptr = shmat(shared_mem_id, NULL, 0);
+	// shared_mem_id = shmget(mem_key, 100, IPC_CREAT | 0666);
+ 	// //shared_mem_id = shmget(mem_key, 100, 0666);
+	// shared_ptr = shmat(shared_mem_id, NULL, 0);
 
   	
 	// === need to mmap: =======================
@@ -450,6 +455,18 @@ int main(void)
     // Get the address that maps to the FPGA pixel buffer
 	vga_pixel_ptr =(unsigned int *)(vga_pixel_virtual_base);
 
+	// RAM FPGA PARAMETER ADDING 
+	sram_virtual_base = mmap(NULL, FPGA_ONCHIP_SPAN, (PROT_READ | PROT_WRITE ), MAP_SHARED, fd, FPGA_ONCHIP_BASE);
+
+	if (sram_virtual_base == MAP_FAILED) { 
+		printf( "ERROR: mmap3() failed...\n" );
+		close( fd );
+		return(1);
+
+	}
+	
+	sram_ptr = (unsigned int *) (sram_virtual_base);
+
 	// ===========================================
 
 	/* create a message to be displayed on the VGA 
@@ -463,7 +480,7 @@ int main(void)
 	//VGA_text (34, 1, text_top_row);
 	//VGA_text (34, 2, text_bottom_row);
 	// clear the screen
-	VGA_box (0, 0, 639, 479, 0x1c);
+	// VGA_box (0, 0, 639, 479, 0xfc60);
 	// VGA_box (0, 0, 639, 479, 0x1a);
 	initialize_grid();
 
@@ -471,17 +488,15 @@ int main(void)
 
 	for (x = 0; x < 145; x++) { 
 		one_iter();
-	// 	sleep(1);
-	//	update_s_vals();
-		// print_s_vals();
-		// run_snow();
+
         for (i = 0; i < WIDTH; i++) {
             for (j = 0; j < HEIGHT; j++) {
                 // handshake ??? not sure if it needs to be here or in the other part 
                 // so actually i think it should be in the other part
                 // for each cell, map pixels to draw onto the vga
                 int count = 0;
-                if (i % 2 == 0) {
+
+                if (i % 2 == 0) { // even columns 
                     if (cells[i][j].s >= 1) { // if frozen, do the cell mappings to m10k memory and set color
                         for (x = 0; x < 2; x++) {
                             for (y = 0; y < 2; y++) {
@@ -489,56 +504,58 @@ int main(void)
                                 // send the values over to be written to an m10k block? mapping is already done
                                 int cellx = (2*i)+x;
                                 int celly = (2*j)+y;
-                                *pio_write_address = (640*celly)+cellx;
-                                *pio_cell_color = rgb(7,7,7); // in 8 bit, int 255
+								VGA_disc(cellx, celly, 0, 0xffff);
+                                // *pio_write_address = (640*celly)+cellx;
+                                // *pio_cell_color = 255;
 
                             }
                             
                         }
                     }
-                    else {
-                        for (x = 0; x < 2; x++) {
-                            for (y = 0; y < 2; y++) {
-                                // add some handshake here ?????????
-                                int cellx = (2*i)+x;
-                                int celly = (2*j)+y;
-                                *pio_write_address = (640*celly)+cellx;
-                                *pio_cell_color = rgb(0,0,0); // int 0
+                    // else {
+                    //     for (x = 0; x < 2; x++) {
+                    //         for (y = 0; y < 2; y++) {
+                    //             int cellx = (2*i)+x;
+                    //             int celly = (2*j)+y;
+					// 			VGA_disc(cellx, celly, 0, 0);
+                    //             // *pio_write_address = (640*celly)+cellx;
+                    //             // *pio_cell_color = 0;
 
-                            }
+                    //         }
                             
-                        }
-                    }
+                    //     }
+                    // }
                 }
-                else {
-                    if (cells[i][j].s >= 1) { // if frozen, do the cell mappings to m10k memory and set color
-                        for (x = 0; x < 2; x++) {
-                            for (y = 0; y < 2; y++) {
-                                // add some handshake here ?????????s
-                                // send the values over to be written to an m10k block? mapping is already done
-                                int cellx = (2*i)+x;
-                                int celly = (2*j)+y+1;
-                                *pio_write_address = (640*celly)+cellx;
-                                *pio_cell_color = rgb(7,7,7); // int 255
+                // else { // odd columns
+                //     if (cells[i][j].s >= 1) { // if frozen, do the cell mappings to m10k memory and set color
+                //         for (x = 0; x < 2; x++) {
+                //             for (y = 0; y < 2; y++) {
+                //                 // add some handshake here ?????????s
+                //                 // send the values over to be written to an m10k block? mapping is already done
+                //                 int cellx = (2*i)+x;
+                //                 int celly = (2*j)+y+1;
+				// 				VGA_disc(cellx, celly, 0, 0xff);
+                //                 // *pio_write_address = (640*celly)+cellx;
+                //                 // *pio_cell_color = 255;
 
-                            }
+                //             }
                             
-                        }
-                    }
-                    else {
-                        for (x = 0; x < 2; x++) {
-                            for (y = 0; y < 2; y++) {
-                                // add some handshake here ?????????
-                                int cellx = (2*i)+x;
-                                int celly = (2*j)+y+1;
-                                *pio_write_address = (640*celly)+cellx;
-                                *pio_cell_color = rgb(0,0,0); // int 0
+                //         }
+                //     }
+                //     else {
+                //         for (x = 0; x < 2; x++) {
+                //             for (y = 0; y < 2; y++) {
+                //                 int cellx = (2*i)+x;
+                //                 int celly = (2*j)+y+1;
+				// 				VGA_disc(cellx, celly, 0, 0x00);
+                //                 // *pio_write_address = (640*celly)+cellx;
+                //                 // *pio_cell_color = 0;
 
-                            }
+                //             }
                             
-                        }
-                    }
-                }
+                //         }
+                //     }
+                // }
                 
             }
         }
@@ -546,12 +563,6 @@ int main(void)
 }
 	
 	
-
-	// VGA_cell(2*4, 2*4, 2*4 + 2, 2*4 + 2,  0x00);
-	// draw_VGA_test();
-		
-
-	// }
 	
 	
 
@@ -581,7 +592,7 @@ void VGA_cell(int x1, int y1, int x2, int y2, short pixel_color)
 
 
 /****************************************************************************************
- * Subroutine to send a string of text to the VGA monitor 
+ * Subroutine to send a string of text to the VGA monitor
 ****************************************************************************************/
 void VGA_text(int x, int y, char * text_ptr)
 {
@@ -592,14 +603,14 @@ void VGA_text(int x, int y, char * text_ptr)
 	while ( *(text_ptr) )
 	{
 		// write to the character buffer
-		*(character_buffer + offset) = *(text_ptr);	
+		*(character_buffer + offset) = *(text_ptr);
 		++text_ptr;
 		++offset;
 	}
 }
 
 /****************************************************************************************
- * Subroutine to clear text to the VGA monitor 
+ * Subroutine to clear text to the VGA monitor
 ****************************************************************************************/
 void VGA_text_clear()
 {
@@ -610,19 +621,19 @@ void VGA_text_clear()
 	/* assume that the text string fits on one line */
 			offset = (y << 7) + x;
 			// write to the character buffer
-			*(character_buffer + offset) = ' ';		
+			*(character_buffer + offset) = ' ';
 		}
 	}
 }
 
 /****************************************************************************************
- * Draw a filled rectangle on the VGA monitor 
+ * Draw a filled rectangle on the VGA monitor
 ****************************************************************************************/
-#define SWAP(X,Y) do{int temp=X; X=Y; Y=temp;}while(0) 
+#define SWAP(X,Y) do{int temp=X; X=Y; Y=temp;}while(0)
 
 void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
 {
-	char  *pixel_ptr ; 
+	char  *pixel_ptr ;
 	int row, col;
 
 	/* check and fix box coordinates to be valid */
@@ -640,23 +651,21 @@ void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
 		for (col = x1; col <= x2; ++col)
 		{
 			//640x480
-			pixel_ptr = (char *)vga_pixel_ptr + (row<<10)    + col ;
-			// set pixel color
-			*(char *)pixel_ptr = pixel_color;		
+			VGA_PIXEL(col, row, pixel_color);
 		}
 }
 
 /****************************************************************************************
- * Draw a filled circle on the VGA monitor 
+ * Draw a filled circle on the VGA monitor using GPU FSM
 ****************************************************************************************/
 
 void VGA_disc(int x, int y, int r, short pixel_color)
 {
-	char  *pixel_ptr ; 
+	char  *pixel_ptr ;
 	int row, col, rsqr, xc, yc;
-	
+
 	rsqr = r*r;
-	
+
 	for (yc = -r; yc <= r; yc++)
 		for (xc = -r; xc <= r; xc++)
 		{
@@ -671,19 +680,28 @@ void VGA_disc(int x, int y, int r, short pixel_color)
 				if (row>479) row = 479;
 				if (col<0) col = 0;
 				if (row<0) row = 0;
-				pixel_ptr = (char *)vga_pixel_ptr + (row<<10) + col ;
-				// set pixel color
-				*(char *)pixel_ptr = pixel_color;
-			}
-					
+
+                // set up scratch pad parameters
+                *(sram_ptr+1) = col-0.5;
+                *(sram_ptr+2) = row-0.5;
+                *(sram_ptr+3) = col;
+                *(sram_ptr+4) = row;
+                *(sram_ptr+5) = pixel_color;
+                *(sram_ptr) = 1; // the "data-ready" flag
+
+                // wait for FPGA to zero the "data_ready" flag
+                while (*(sram_ptr)>0) ;
+
+            }
+
 		}
 }
 
 // =============================================
 // === Draw a line
 // =============================================
-//plot a line 
-//at x1,y1 to x2,y2 with color 
+//plot a line
+//at x1,y1 to x2,y2 with color
 //Code is from David Rodgers,
 //"Procedural Elements of Computer Graphics",1985
 void VGA_line(int x1, int y1, int x2, int y2, short c) {
@@ -692,7 +710,7 @@ void VGA_line(int x1, int y1, int x2, int y2, short c) {
 	signed int s1,s2, xchange;
      signed int x,y;
 	char *pixel_ptr ;
-	
+
 	/* check and fix line coordinates to be valid */
 	if (x1>639) x1 = 639;
 	if (y1>479) y1 = 479;
@@ -702,10 +720,10 @@ void VGA_line(int x1, int y1, int x2, int y2, short c) {
 	if (y1<0) y1 = 0;
 	if (x2<0) x2 = 0;
 	if (y2<0) y2 = 0;
-        
+
 	x = x1;
 	y = y1;
-	
+
 	//take absolute value
 	if (x2 < x1) {
 		dx = x1 - x2;
@@ -737,23 +755,24 @@ void VGA_line(int x1, int y1, int x2, int y2, short c) {
 		s2 = 1;
 	}
 
-	xchange = 0;   
+	xchange = 0;
 
 	if (dy>dx) {
 		temp = dx;
 		dx = dy;
 		dy = temp;
 		xchange = 1;
-	} 
+	}
 
-	e = ((int)dy<<1) - dx;  
-	 
+	e = ((int)dy<<1) - dx;
+
 	for (j=0; j<=dx; j++) {
 		//video_pt(x,y,c); //640x480
-		pixel_ptr = (char *)vga_pixel_ptr + (y<<10)+ x; 
+		VGA_PIXEL(x, y, c);
+		//pixel_ptr = (char *)vga_pixel_ptr + (y<<10)+ x;
 		// set pixel color
-		*(char *)pixel_ptr = c;	
-		 
+		//*(char *)pixel_ptr = c;
+
 		if (e>=0) {
 			if (xchange==1) x = x + s1;
 			else y = y + s2;
@@ -766,3 +785,7 @@ void VGA_line(int x1, int y1, int x2, int y2, short c) {
 		e = e + ((int)dy<<1);
 	}
 }
+
+/// /// /////////////////////////////////////
+/// end /////////////////////////////////////
+              
