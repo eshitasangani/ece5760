@@ -2,7 +2,7 @@
 /// 640x480 version!
 /// change to fixed point 
 /// compile with:
-/// gcc snowflake_vga.c -o snow
+/// gcc fpga_draw.c -o draw -pthread
 ///////////////////////////////////////
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,6 +15,10 @@
 #include <sys/mman.h>
 #include <sys/time.h> 
 #include "address_map_arm_brl4.h"
+#include <pthread.h>
+
+// lock for scanf
+pthread_mutex_t scan_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* Cyclone V FPGA devices */
 #define HW_REGS_BASE          0xff200000
@@ -42,7 +46,6 @@ void VGA_cell (int, int, int, int, short);
 typedef signed int fix28 ;
 //multiply two fixed 4:28
 #define multfix28(a,b) ((fix28)(((( signed long long)(a))*(( signed long long)(b)))>>28)) 
-//#define multfix28(a,b) ((fix28)((( ((short)((a)>>17)) * ((short)((b)>>17)) )))) 
 #define float2fix28(a) ((fix28)((a)*268435456.0f)) // 2^28
 #define fix2float28(a) ((float)(a)/268435456.0f) 
 #define int2fix28(a) ((a)<<28);
@@ -82,18 +85,18 @@ int i,j,k,x,y;
 
 
 // ----- PIO ADDRESS BASES ----- //
-#define PIO_WRITE_ADDRESS       0x00000000 
-#define PIO_CELL_COLOR          0x00000010
+#define PIO_RESET_TO_HPS_BASE       0x00000000 
 
-volatile unsigned int *pio_write_address = NULL;
-volatile unsigned int *pio_cell_color    = NULL;
+volatile unsigned int *pio_reset_to_hps = NULL;
 
 ///////////////////////////////////////////////// 
 #define WIDTH 301
-#define HEIGHT 301
-#define ALPHA 1.0
-#define BETA 0.8
-#define GAMMA 0.01
+#define HEIGHT 301 
+
+// #define ALPHA 1.0
+// #define BETA 0.8
+// #define GAMMA 0.01
+
 #define NUM_NEIGHBORS 6
 
 typedef struct {
@@ -109,8 +112,10 @@ Cell cells[WIDTH][HEIGHT];
 float s_vals[WIDTH][HEIGHT]; // Array to store s values for visualization or debugging
 Cell* neighbors[NUM_NEIGHBORS];
 Cell frozen[WIDTH][HEIGHT];
-//int frozen_cells[WIDTH][HEIGHT];
 int num_neighbors;
+float u_avg = 0.0;
+float sum_u = 0.0;
+short color; 
 // 8-bit color
 #define rgb(r,g,b) ((((r)&7)<<5) | (((g)&7)<<2) | (((b)&3)))
 
@@ -124,7 +129,6 @@ int num_neighbors;
 
 // Get neighbors for a specific coordinate
 int get_num_neighbors(Cell* neighbors[], int x, int y) {
-	// SET EDGE CELLS TO BE STATIC ??
     int count = 0;
 
 	if (y != 0) { // top neighbor, does not rely on if the column is even or odd
@@ -167,15 +171,10 @@ int get_num_neighbors(Cell* neighbors[], int x, int y) {
     return count;
 }
 
-// // "length" is the length of the array.   
-// #define each(item, array, length) \
-// (typeof(*(array)) *p = (array), (item) = *p; p < &((array)[length]); p++, (item) = *p)
-
-
 void initialize_grid() {
     for ( i = 0; i < WIDTH; i++) {
         for ( j = 0; j < HEIGHT; j++) {
-            cells[i][j].s = BETA;
+            cells[i][j].s = init_beta;
             cells[i][j].is_receptive = false;
             cells[i][j].u = 0;
 			cells[i][j].next_u = 0;
@@ -184,44 +183,94 @@ void initialize_grid() {
         }
     }
     // Set the center cell
-    cells[(WIDTH -1 ) / 2 ][(HEIGHT -1 ) / 2].s = 1.0;
-    cells[(WIDTH -1 ) / 2][(HEIGHT -1 ) / 2].is_receptive = true;
-	cells[10][10].s = 1.0;
+    cells[ (WIDTH - 1 ) / 2 ] [(HEIGHT - 1 ) / 2].s = 1.0;
+    cells[ (WIDTH - 1 ) / 2 ] [ (HEIGHT - 1 ) / 2].is_receptive = true;
+
+    cells[10][10].s = 1.0;
     cells[10][10].is_receptive = true;
-
-	// num_neighbors = get_num_neighbors(neighbors, 25, 25);
-
-	// for (k = 0; k < num_neighbors; k++) {
-	// 	neighbors[k]->is_receptive = true;
-	// 	// printf("%.2f", neighbors[k]->s);
-	// 	// printf("s value");
-	// 	// printf("\n");
-	// }
+    cells[200][10].s = 1.0;
+    cells[200][10].is_receptive = true;
+    cells[200][300].s = 1.0;
+    cells[200][300].is_receptive = true;
+    cells[10][200].s = 1.0;
+    cells[10][200].is_receptive = true;
 
 }
 
-void update_s_vals() {
-    for (i = 0; i < WIDTH; i++) {
-        for (j = 0; j < HEIGHT; j++) {
-            s_vals[i][j] = cells[i][j].s;
-        }
-    }
+///////////////////////////////////////////////////////////////
+// THREADS ////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////
+float init_alpha = 0.1;
+float init_beta = 0.8;
+float init_gamma = 0.1;
+int set; 
+int paused = 0; 
+///////////////////////////////////////////////////////////////
+// reset thread  // 
+///////////////////////////////////////////////////////////////
+
+void * reset_thread() {
+
+	while (1) {
+		if(*pio_reset_to_hps)
+		{ 
+			VGA_box (0, 0, 639, 479, 0x0000);
+		}
+
+	}
+
 }
 
-void print_s_vals() {
-    for (i = 0; i < WIDTH; i++) {
-        for (j = 0; j < HEIGHT; j++) {
-            printf("%.2f ", cells[i][j].s);
-        }
-        printf("\n");
-    }
-    printf("\n");
-}
+///////////////////////////////////////////////////////////////
+// modify paramters through scan thread // 
+///////////////////////////////////////////////////////////////
 
+void * scan_thread () {
 
-float u_avg = 0.0;
-float sum_u = 0.0;
-short color; 
+	while (1) { 
+		// which category to change
+
+		printf("0: alpha, 1: beta, 2: gamma, 3: pause, 4: clear -- ");
+    	scanf("%i", &set);
+
+		switch ( set ) {
+		
+			case 0:  // changing alpha 
+
+				printf("Enter alpha: ");
+				scanf("%f", init_alpha);
+			
+			break;
+
+			case 1:  // changing beta 
+
+				printf("Enter beta: ");
+				scanf("%f", init_beta);
+				
+			break; 
+
+			case 2:  // changing gamma 
+
+				printf("Enter gamma: ");
+				scanf("%f", init_gamma);
+
+			break; 
+
+			case 3:  // setting paused 
+
+				printf("Pause/Play: ");
+				scanf("%f", paused);
+
+			case 4: // clear screen 
+				VGA_box (0, 0, 639, 479, 0x0000);
+
+			break;
+
+		} 
+
+	} 
+
+} 
 
 void one_iter() {
 
@@ -232,7 +281,7 @@ void one_iter() {
             if (cells[i][j].is_receptive) {
                 cells[i][j].u = 0;
                 cells[i][j].v = cells[i][j].s;
-                cells[i][j].next_v = cells[i][j].s + GAMMA;
+                cells[i][j].next_v = cells[i][j].s + init_gamma;
             } 
 			else {
                 cells[i][j].u = cells[i][j].s;
@@ -246,47 +295,31 @@ void one_iter() {
 		for (j = 0; j < HEIGHT; j++) {
 
 			if (i == 0 || i == WIDTH-1 || j == 0 || j == HEIGHT-1) { // for edge cells
-				cells[i][j].u = BETA;
+				cells[i][j].u = init_beta;
 				cells[i][j].v = 0;
 			}
 
 			else { // everything else
 				num_neighbors = get_num_neighbors(neighbors, i, j); // get num neighbors @ specific coord + modify neighbors
 
-				// if (num_neighbors > 0) { // make sure there are neighbors so we can avoid division bt 0
-					sum_u = 0;
+				sum_u = 0;
 
-					for (k = 0; k < num_neighbors; k++) {
-						sum_u += neighbors[k]->u; // Sum u values of all neighbors
-					}
+				for (k = 0; k < num_neighbors; k++) {
+					sum_u += neighbors[k]->u; // Sum u values of all neighbors
+				}
 
-					u_avg = sum_u / num_neighbors; // Calculate average u
-					
-					cells[i][j].next_u = cells[i][j].u + (ALPHA / 2 * (u_avg - cells[i][j].u)); // update u based on diffusion eq 
-					// printf("%.2f ", cells[i][j].next_u);
-					// update the cell
-					cells[i][j].s = cells[i][j].next_u + cells[i][j].next_v; 
+				u_avg = sum_u / num_neighbors; // Calculate average u
+				
+				cells[i][j].next_u = cells[i][j].u + (init_alpha / 2 * (u_avg - cells[i][j].u)); // update u based on diffusion eq 
+				cells[i][j].s = cells[i][j].next_u + cells[i][j].next_v; 
 
-					// Update receptiveness based on the new sp
-					if (cells[i][j].s >= 1) {
-						cells[i][j].is_receptive = true;
-					}
-					// 	//neighbors[k]->is_receptive = true;
-					// 	for (k = 0; k < num_neighbors; k++) {
-					// 		neighbors[k]->is_receptive = true;
-					// 		// printf("%.2f", neighbors[k]->s);
-					// 		// printf("s value");
-					// 		// printf("\n");
+				// Update receptiveness based on the new sp
+				if (cells[i][j].s >= 1) {
+					cells[i][j].is_receptive = true;
+				}
 
-					// 	}
-					// } 
 			}
 
-			// } 
-			// end of if statment checking to make sure if we have neighbors or not 
-			// else { // if cell has no neighbors, just make it so that it is not receptive
-			// 	cells[i][j].is_receptive = false;
-			// }
 		}
 	}
 
@@ -295,113 +328,79 @@ void one_iter() {
 		for (j = 0; j < HEIGHT; j++) { 
 			if (!cells[i][j].is_receptive) {
 				num_neighbors = get_num_neighbors(neighbors, i, j); 
-				// printf("%d", num_neighbors);
-				
+
 				for (k = 0; k < num_neighbors; k++) {
 					if (neighbors[k]->s >= 1) { 
 
-						// printf("%.2f", neighbors[k]->s);
-						// printf("s value");
-						// printf("\n");
-
-						// neighbors[k]->is_receptive = true; // this should already be true
-
 						cells[i][j].is_receptive = true; // one of the neighbors is frozen, so we mark this cell as receptive
 					} 
-					// break;					
 				}
-				// break;
 
 			}
 
 		}
 	}
-	//update_s_vals();
 
  }
 
+///////////////////////////////////////////////////////////////
+// draw thread // 
+///////////////////////////////////////////////////////////////
 
+void * draw_thread () {
+	initialize_grid();
 
-void run_snow() {
-	// this runs snowflake gen for 1 iteration + updates the cells 
-	
-	for (i = 0; i < WIDTH; i++) { 
-		for (j = 0; j < HEIGHT; j++){
-			// if (s_vals[i][j] >= 1) {
-			// 	frozen_cells[i][j] = 1;
-			// }
+	for (x = 0; x < 145; x++) { 
 
-			color = cells[i][j].s >= 1 ? rgb(7,7,7) : rgb(0,0,0); 
+		if (!paused) {  // if paused is 0 = means we can continue calculating and drawing 
 
-			// for (x = 0; x < 320; x++) { // column number (x)
-			// 	for (y = 0; y < 240; y++ ) {  // row number (y)
-					// inside vga now 
+			one_iter(); // does the actual calculation 
+			for (i = 0; i < WIDTH; i++) {
+				for (j = 0; j < HEIGHT; j++) {
+					int count = 0;
 
-			// if even column 
-			if (i % 2 == 0) { 
-				VGA_box(2*i, 2*j, 2*i + 2, 2*j + 2,  color);
-				// float b = 2*i;
-				// float c = 2*j;
-				// float d = 2*i+2;
-				// float e = 2*j+2;
+					if (i % 2 == 0) { // even columns 
+						if (cells[i][j].s >= 1) { 
+							for (x = 0; x < 2; x++) {
+								for (y = 0; y < 2; y++) {
 
-				// printf("%.2f", b);
-				// printf(" ");
+									int cellx = (2*i)+x;
+									int celly = (2*j)+y;
+									VGA_disc(cellx, celly, 0, 0xffff);
 
-				// printf("%.2f", c);
-				// printf(" ");
-				// printf("%.2f", d);
-				// printf(" ");
-				// printf("%.2f", e);
-				// printf("\n");
+								}
+							}
+						}
 
-			}
-			else { 
-				VGA_box(2*i, 2*j + 1, 2*i + 2, 2*j + 3,  color);
-			}
-					 
-			// 	}
-			// }
+					}
+					else { // odd columns
+						if (cells[i][j].s >= 1) { 
+							for (x = 0; x < 2; x++) {
+								for (y = 0; y < 2; y++) {
+									int cellx = (2*i)+x;
+									int celly = (2*j)+y+1;
+									VGA_disc(cellx, celly, 0, 0xffff);
+
+								}
+								
+							}
+						}
+
+					}
+					
+				}
+        	}
 
 		}
-	}
-	// for (i = 0; i < WIDTH; i++) {
-	// 	for (j = 0; j < HEIGHT; j++) {
+        
+    }
 
-	// 		color = frozen_cells[i][j] == 1 ? rgb(7,7,7) : rgb(0,0,0); 
-	// 		// if even column 
-	// 		if (i % 2 == 0) { 
-	// 			VGA_box(2*i, 2*j, 2*i + 2, 2*j + 2,  color);
-
-	// 		}
-	// 		else { 
-	// 			VGA_box(2*i, 2*j + 1, 2*i + 2, 2*j + 3,  color);
-	// 		}
-	// 	}
-	// }
 }
 
-void draw_VGA_test(){
-	// index by the cell numbers
-	for (i = 1; i < 640; i++) {  // column number (x)
-		for (j = 1; j < 480; j++ ) { // row number (y)
-			// void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
-			if (j % 2 == 0) {
-				// VGA_PIXEL(2*i, 2*(j-1), 2*(i+2), 2*(j-3), 0x1d);
-				VGA_box(i-1, j-1, i+1, j+1, 0x1d);
-			}  
-			else{
-				VGA_box(i, j, i-1, j-1, 0x1b);
-			}
-		}
-	}
-}
 
 
 int main(void)
 {
-	//int x1, y1, x2, y2;
-
 	// Declare volatile pointers to I/O registers (volatile 	// means that IO load and store instructions will be used 	// to access these pointer locations, 
 	// instead of regular memory loads and stores) 
 
@@ -411,7 +410,6 @@ int main(void)
  	// //shared_mem_id = shmget(mem_key, 100, 0666);
 	// shared_ptr = shmat(shared_mem_id, NULL, 0);
 
-  	
 	// === need to mmap: =======================
 	// FPGA_CHAR_BASE
 	// FPGA_ONCHIP_BASE      
@@ -468,119 +466,32 @@ int main(void)
 	}
 	
 	sram_ptr = (unsigned int *) (sram_virtual_base);
+	pio_reset_to_hps = (unsigned int *)(h2p_lw_virtual_base + PIO_RESET_TO_HPS_BASE);
 
 	// ===========================================
 
-	/* create a message to be displayed on the VGA 
-          and LCD displays */
-	char text_top_row[40] = "DE1-SoC ARM/FPGA\0";
-	char text_bottom_row[40] = "Cornell ece5760\0";
+	// thread identifiers
+   	pthread_t thread_scan, thread_draw, thread_reset;
 
-    pio_write_address   = (unsigned int *)(h2p_lw_virtual_base +  PIO_WRITE_ADDRESS );
-	pio_cell_color      = (unsigned int *)(h2p_lw_virtual_base +  PIO_CELL_COLOR );
-
-	//VGA_text (34, 1, text_top_row);
-	//VGA_text (34, 2, text_bottom_row);
-	// clear the screen
-	// VGA_box (0, 0, 639, 479, 0x0000);
-	// VGA_box (0, 0, 639, 479, 0x1a);
-	initialize_grid();
-
-	// while (1) { 
-
-	for (x = 0; x < 145; x++) { 
-		one_iter();
-
-        for (i = 0; i < WIDTH; i++) {
-            for (j = 0; j < HEIGHT; j++) {
-                // handshake ??? not sure if it needs to be here or in the other part 
-                // so actually i think it should be in the other part
-                // for each cell, map pixels to draw onto the vga
-                int count = 0;
-
-                if (i % 2 == 0) { // even columns 
-                    if (cells[i][j].s >= 1) { // if frozen, do the cell mappings to m10k memory and set color
-                        for (x = 0; x < 2; x++) {
-                            for (y = 0; y < 2; y++) {
-                                // add some handshake here ?????????s
-                                // send the values over to be written to an m10k block? mapping is already done
-                                int cellx = (2*i)+x;
-                                int celly = (2*j)+y;
-								VGA_disc(cellx, celly, 0, 0xffff);
-                                // *pio_write_address = (640*celly)+cellx;
-                                // *pio_cell_color = 255;
-
-                            }
-                            
-                        }
-                    }
-                    // else {
-                    //     for (x = 0; x < 2; x++) {
-                    //         for (y = 0; y < 2; y++) {
-                    //             int cellx = (2*i)+x;
-                    //             int celly = (2*j)+y;
-					// 			VGA_disc(cellx, celly, 0, 0);
-                    //             // *pio_write_address = (640*celly)+cellx;
-                    //             // *pio_cell_color = 0;
-
-                    //         }
-                            
-                    //     }
-                    // }
-                }
-                else { // odd columns
-                    if (cells[i][j].s >= 1) { // if frozen, do the cell mappings to m10k memory and set color
-                        for (x = 0; x < 2; x++) {
-                            for (y = 0; y < 2; y++) {
-                                // add some handshake here ?????????s
-                                // send the values over to be written to an m10k block? mapping is already done
-                                int cellx = (2*i)+x;
-                                int celly = (2*j)+y+1;
-								VGA_disc(cellx, celly, 0, 0xffff);
-                                // *pio_write_address = (640*celly)+cellx;
-                                // *pio_cell_color = 255;
-
-                            }
-                            
-                        }
-                    }
-                    // else {
-                    //     for (x = 0; x < 2; x++) {
-                    //         for (y = 0; y < 2; y++) {
-                    //             int cellx = (2*i)+x;
-                    //             int celly = (2*j)+y+1;
-					// 			VGA_disc(cellx, celly, 0, 0x00);
-                    //             // *pio_write_address = (640*celly)+cellx;
-                    //             // *pio_cell_color = 0;
-
-                    //         }
-                            
-                    //     }
-                    // }
-                }
-                
-            }
-        }
-    }
-}
+	pthread_attr_t attr;
+	pthread_attr_init( &attr );
+	pthread_attr_setdetachstate( &attr, PTHREAD_CREATE_JOINABLE );
 	
-	
-	
+	 // now the threads
+	pthread_create( &thread_reset, NULL, reset_thread, NULL );
+	pthread_create( &thread_draw, NULL, draw_thread, NULL );
+	pthread_create( &thread_scan, NULL, scan_thread, NULL );
+
+	pthread_join( thread_reset, NULL );
+	pthread_join( thread_draw, NULL );
+	pthread_join( thread_scan, NULL );
+
+   	return 0;
+
+
 	
 
-	// update_s_vals();
-	// print_u_vals();
-	// printf("%f", cells[25][25].u);
-	// printf("%f", cells[25][25].v);
-	// printf("%f", cells[25][25].s);
-	// clear the text
-	// VGA_text_clear();
-
-    // VGA_text (10, 1, text_top_row);
-    // VGA_text (10, 2, text_bottom_row);
-    
-	//} // end while(1)
- // end main
+} // end main 
 
 
 void VGA_cell(int x1, int y1, int x2, int y2, short pixel_color)
@@ -635,26 +546,26 @@ void VGA_text_clear()
 
 void VGA_box(int x1, int y1, int x2, int y2, short pixel_color)
 {
-	char  *pixel_ptr ;
-	int row, col;
+    char  *pixel_ptr ;
+    int row, col;
 
-	/* check and fix box coordinates to be valid */
-	if (x1>639) x1 = 639;
-	if (y1>479) y1 = 479;
-	if (x2>639) x2 = 639;
-	if (y2>479) y2 = 479;
-	if (x1<0) x1 = 0;
-	if (y1<0) y1 = 0;
-	if (x2<0) x2 = 0;
-	if (y2<0) y2 = 0;
-	if (x1>x2) SWAP(x1,x2);
-	if (y1>y2) SWAP(y1,y2);
-	for (row = y1; row <= y2; row++)
-		for (col = x1; col <= x2; ++col)
-		{
-			//640x480
-			VGA_PIXEL(col, row, pixel_color);
-		}
+    /* check and fix box coordinates to be valid */
+    if (x1>639) x1 = 639;
+    if (y1>479) y1 = 479;
+    if (x2>639) x2 = 639;
+    if (y2>479) y2 = 479;
+    if (x1<0) x1 = 0;
+    if (y1<0) y1 = 0;
+    if (x2<0) x2 = 0;
+    if (y2<0) y2 = 0;
+    if (x1>x2) SWAP(x1,x2);
+    if (y1>y2) SWAP(y1,y2);
+    for (row = y1; row <= y2; row++)
+        for (col = x1; col <= x2; ++col)
+        {
+            //640x480
+            VGA_disc(col, row, 0, pixel_color);
+        }
 }
 
 /****************************************************************************************
