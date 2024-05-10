@@ -128,7 +128,7 @@ Cell frozen[WIDTH][HEIGHT];
 int num_neighbors;
 float u_avg = 0.0;
 float sum_u = 0.0;
-short color; 
+short color = 0xffff; 
 // 8-bit color
 #define rgb(r,g,b) ((((r)&7)<<5) | (((g)&7)<<2) | (((b)&3)))
 
@@ -214,8 +214,27 @@ void initialize_grid() {
         }
     }
     // Set the center cell
-    cells[ (WIDTH - 1 ) / 6 ] [ (HEIGHT - 1 ) / 2].s = 1.0;
-    cells[ (WIDTH - 1 ) / 6 ] [ (HEIGHT - 1 ) / 2].is_receptive = true;
+    cells[ (WIDTH - 1 ) / 8 ] [ (HEIGHT - 1 ) / 8].s = 1.0;
+    cells[ (WIDTH - 1 ) / 8 ] [ (HEIGHT - 1 ) / 8].is_receptive = true;
+
+	cells[ (WIDTH - 1 ) / 4 ] [ 3 * (HEIGHT - 1 ) / 16].s = 1.0;
+    cells[ (WIDTH - 1 ) / 4 ] [ 3 * (HEIGHT - 1 ) / 16].is_receptive = true;
+
+	cells[ 6 * (WIDTH - 1 ) / 16 ] [ (HEIGHT - 1 ) / 8].s = 1.0;
+    cells[ 6 * (WIDTH - 1 ) / 16 ] [ (HEIGHT - 1 ) / 8].is_receptive = true;
+
+
+	cells[ 6 * (WIDTH - 1 ) / 16 ] [ 6 * (HEIGHT - 1 ) / 16].s = 1.0;
+    cells[ 6 * (WIDTH - 1 ) / 16 ] [ 6 * (HEIGHT - 1 ) / 16].is_receptive = true;
+
+	cells[ (WIDTH - 1 ) / 4 ] [ 5 * (HEIGHT - 1 ) / 16].s = 1.0;
+    cells[ (WIDTH - 1 ) / 4 ] [ 5 * (HEIGHT - 1 ) / 16].is_receptive = true;
+
+	cells[ 6 * (WIDTH - 1 ) / 16] [ 6 * (HEIGHT - 1 ) / 16].s = 1.0;
+    cells[ 6 * (WIDTH - 1 ) / 16] [ 6 * (HEIGHT - 1 ) / 16].is_receptive = true;
+
+	cells[  (WIDTH - 1 ) / 8] [ 6 * (HEIGHT - 1 ) / 16].s = 1.0;
+    cells[  (WIDTH - 1 ) / 8] [ 6 * (HEIGHT - 1 ) / 16].is_receptive = true;
 
 	// cells[ (WIDTH - 1 ) / 6 ] [ (HEIGHT - 1 ) / 6].s = 1.0;
     // cells[ (WIDTH - 1 ) / 6 ] [ (HEIGHT - 1 ) / 6].is_receptive = true;
@@ -260,11 +279,13 @@ void * reset_thread() {
 ///////////////////////////////////////////////////////////////
 
 void * scan_thread () {
+	int xcoord;
+	int ycoord;
 
 	while (1) { 
 		// which category to change
 
-		printf("0: alpha, 1: beta, 2: gamma, 3: pause, 4: clear -- ");
+		printf("0: alpha, 1: beta, 2: gamma, 3: new seed, 4: pause, 5: clear -- ");
     	scanf("%i", &set);
 
 		switch ( set ) {
@@ -273,15 +294,15 @@ void * scan_thread () {
 
 				printf("Enter alpha: ");
 				scanf("%f", &init_alpha);
+				// color -= 4;
 			
 			break;
 
 			case 1:  // changing beta 
 
 				printf("Enter beta: ");
-				old_beta = init_beta;
+				// old_beta = init_beta;
 				scanf("%f", &init_beta);
-				reset_beta = 1;
 				
 			break; 
 
@@ -289,17 +310,31 @@ void * scan_thread () {
 
 				printf("Enter gamma: ");
 				scanf("%f", &init_gamma);
+				// color -= 4;
 
 			break; 
 
-			case 3:  // setting paused 
+			case 3: 
+				printf("Enter x coordinate (0-639): ");
+				scanf("%d", &xcoord);
+				printf("Enter y coordinate (0-479): ");
+				scanf("%d", &ycoord);
+
+				cells[xcoord / 2] [ycoord / 2].s = 1.0;
+				cells[xcoord / 2] [ycoord / 2].is_receptive = true;	
+
+			break;
+
+			case 4:  // setting paused 
 
 				printf("Pause/Play: ");
 				scanf("%i", &paused);
 			break;
+			
 
-			case 4: // clear screen 
+			case 5: // clear screen 
 				// VGA_box (0, 0, 639, 479, 0x0000);
+				// color = 0xffff;
 				init_reset = 1;
 
 			break;
@@ -416,56 +451,56 @@ void * draw_thread () {
 						if (cells[i][j].s >= 1) { 
 							
 							// top left
-							if (i < ((WIDTH-1) / 2) && j < ((HEIGHT-1)/2)){
+							// if (i < ((WIDTH-1) / 2) && j < ((HEIGHT-1)/2)){
 								for (x = 0; x < 2; x++) {
 									for (y = 0; y < 2; y++) {
 
-										int cellx = (2*i)+x - 100;
-										int celly = (2*j)+y - 100;
-										VGA_disc(cellx, celly, 0, green);
+										int cellx = (2*i)+x;
+										int celly = (2*j)+y;
+										VGA_disc(cellx, celly, 0, color);
 
 									}
 								}
-							}
+							// }
 
-							// bottom left
-							if (i < ((WIDTH-1) / 2) && j >= ((HEIGHT-1)/2)){
-								for (x = 0; x < 2; x++) {
-									for (y = 0; y < 2; y++) {
+							// // bottom left
+							// if (i < ((WIDTH-1) / 2) && j >= ((HEIGHT-1)/2)){
+							// 	for (x = 0; x < 2; x++) {
+							// 		for (y = 0; y < 2; y++) {
 
-										int cellx = (2*i)+x - 100;
-										int celly = (2*j)+y - 100;
-										VGA_disc(cellx, celly, 0, blue);
+							// 			int cellx = (2*i)+x - 100;
+							// 			int celly = (2*j)+y - 100;
+							// 			VGA_disc(cellx, celly, 0, blue);
 
-									}
-								}
-							}
+							// 		}
+							// 	}
+							// }
 
-							// top right
-							if (i >= ((WIDTH-1) / 2) && j < ((HEIGHT-1)/2)){
-								for (x = 0; x < 2; x++) {
-									for (y = 0; y < 2; y++) {
+							// // top right
+							// if (i >= ((WIDTH-1) / 2) && j < ((HEIGHT-1)/2)){
+							// 	for (x = 0; x < 2; x++) {
+							// 		for (y = 0; y < 2; y++) {
 
-										int cellx = (2*i)+x - 100;
-										int celly = (2*j)+y - 100;
-										VGA_disc(cellx, celly, 0, dark_blue);
+							// 			int cellx = (2*i)+x - 100;
+							// 			int celly = (2*j)+y - 100;
+							// 			VGA_disc(cellx, celly, 0, dark_blue);
 
-									}
-								}
-							}
+							// 		}
+							// 	}
+							// }
 
-							// bottom right
-							if (i >= ((WIDTH-1) / 2) && j >= ((HEIGHT-1)/2)){
-								for (x = 0; x < 2; x++) {
-									for (y = 0; y < 2; y++) {
+							// // bottom right
+							// if (i >= ((WIDTH-1) / 2) && j >= ((HEIGHT-1)/2)){
+							// 	for (x = 0; x < 2; x++) {
+							// 		for (y = 0; y < 2; y++) {
 
-										int cellx = (2*i)+x - 100;
-										int celly = (2*j)+y - 100;
-										VGA_disc(cellx, celly, 0, magenta);
+							// 			int cellx = (2*i)+x - 100;
+							// 			int celly = (2*j)+y - 100;
+							// 			VGA_disc(cellx, celly, 0, magenta);
 
-									}
-								}
-							}
+							// 		}
+							// 	}
+							// }
 							
 						}
 
@@ -473,61 +508,63 @@ void * draw_thread () {
 					else { // odd columns
 						if (cells[i][j].s >= 1) { 
 							// top left
-							if (i < ((WIDTH-1) / 2) && j < ((HEIGHT-1)/2)){
+							// if (i < ((WIDTH-1) / 2) && j < ((HEIGHT-1)/2)){
 								for (x = 0; x < 2; x++) {
 									for (y = 0; y < 2; y++) {
 
-										int cellx = (2*i)+x - 100;
-										int celly = (2*j)+y+1 - 100;
-										VGA_disc(cellx, celly, 0, green);
+										int cellx = (2*i)+x;
+										int celly = (2*j)+y+1;
+										VGA_disc(cellx, celly, 0, color);
 
 									}
 								}
-							}
+							// }
 
-							// bottom left
-							if (i < ((WIDTH-1) / 2) && j >= ((HEIGHT-1)/2)){
-								for (x = 0; x < 2; x++) {
-									for (y = 0; y < 2; y++) {
+							// // bottom left
+							// if (i < ((WIDTH-1) / 2) && j >= ((HEIGHT-1)/2)){
+							// 	for (x = 0; x < 2; x++) {
+							// 		for (y = 0; y < 2; y++) {
 
-										int cellx = (2*i)+x - 100;
-										int celly = (2*j)+y+1 - 100;
-										VGA_disc(cellx, celly, 0, blue);
+							// 			int cellx = (2*i)+x - 100;
+							// 			int celly = (2*j)+y+1 - 100;
+							// 			VGA_disc(cellx, celly, 0, blue);
 
-									}
-								}
-							}
+							// 		}
+							// 	}
+							// }
 
-							// top right
-							if (i >= ((WIDTH-1) / 2) && j < ((HEIGHT-1)/2)){
-								for (x = 0; x < 2; x++) {
-									for (y = 0; y < 2; y++) {
+							// // top right
+							// if (i >= ((WIDTH-1) / 2) && j < ((HEIGHT-1)/2)){
+							// 	for (x = 0; x < 2; x++) {
+							// 		for (y = 0; y < 2; y++) {
 
-										int cellx = (2*i)+x - 100;
-										int celly = (2*j)+y+1 - 100;
-										VGA_disc(cellx, celly, 0, dark_blue);
+							// 			int cellx = (2*i)+x - 100;
+							// 			int celly = (2*j)+y+1 - 100;
+							// 			VGA_disc(cellx, celly, 0, dark_blue);
 
-									}
-								}
-							}
+							// 		}
+							// 	}
+							// }
 
-							// bottom right
-							if (i >= ((WIDTH-1) / 2) && j >= ((HEIGHT-1)/2)){
-								for (x = 0; x < 2; x++) {
-									for (y = 0; y < 2; y++) {
+							// // bottom right
+							// if (i >= ((WIDTH-1) / 2) && j >= ((HEIGHT-1)/2)){
+							// 	for (x = 0; x < 2; x++) {
+							// 		for (y = 0; y < 2; y++) {
 
-										int cellx = (2*i)+x - 100;
-										int celly = (2*j)+y+1 - 100;
-										VGA_disc(cellx, celly, 0, magenta);
+							// 			int cellx = (2*i)+x - 100;
+							// 			int celly = (2*j)+y+1 - 100;
+							// 			VGA_disc(cellx, celly, 0, magenta);
 
-									}
-								}
-							}
+							// 		}
+							// 	}
+							// }
 						}
 					} // end odd 
 					
 				} // end height for
 			} // end width for
+
+			
 
 			iters++;
 		}
@@ -591,6 +628,65 @@ void * draw_thread () {
 
 }
 
+///////////////////////////////////////////////////////////////
+// serial mouse read thread  // 
+///////////////////////////////////////////////////////////////
+
+void *read_mouse_thread() { 
+	//////// BEGIN  INIT ///////// 
+
+    int fd, bytes;
+    unsigned char data[3];
+
+    const char *pDevice = "/dev/input/mice";
+
+    // Open Mouse
+    fd = open(pDevice, O_RDWR);
+    if(fd == -1)
+    {
+        printf("ERROR Opening %s\n", pDevice);
+        return -1;
+    }
+
+	int left, middle, right;// button presses
+    signed char x, y, scroll, prev_x, prev_y, x_accum, y_accum; // mouse coordinates
+
+	//////// END MOUSE INIT /////////
+
+	while (1) { 
+
+		// Read Mouse     
+        bytes = read(fd, data, sizeof(data));
+
+		if(bytes > 0)
+        {
+            left = data[0] & 0x1;
+            right = data[0] & 0x2;
+            middle = data[0] & 0x4;
+
+			prev_x = x_accum;
+			prev_y = y_accum;
+			VGA_disc(320+prev_x*3, 240-prev_y*2, 0, 0x0000);
+
+            x = data[1];
+            y = data[2];
+
+			x_accum += x;
+			y_accum += y;
+			int x_coor = 320+x_accum*3;
+			int y_coor = 240-y_accum*2;
+			VGA_disc(x_coor, y_coor, 0, 0x00e0);
+
+			if (left == 1){
+				cells[  x_coor / 2] [ y_coor/2].s = 1.0;
+    			cells[  x_coor / 2] [ y_coor/2].is_receptive = true;
+			}
+		}
+
+		
+		
+	}
+}
 
 
 int main(void)
@@ -666,7 +762,7 @@ int main(void)
 	VGA_box (0, 0, 639, 479, 0x0000);
 
 	// thread identifiers
-   	pthread_t thread_scan, thread_draw, thread_reset;
+   	pthread_t thread_scan, thread_draw, thread_reset, thread_mouse;
 
 	pthread_attr_t attr;
 	pthread_attr_init( &attr );
@@ -676,10 +772,12 @@ int main(void)
 	pthread_create( &thread_reset, NULL, reset_thread, NULL );
 	pthread_create( &thread_draw, NULL, draw_thread, NULL );
 	pthread_create( &thread_scan, NULL, scan_thread, NULL );
+	pthread_create( &thread_mouse, NULL, read_mouse_thread, NULL );
 
 	pthread_join( thread_reset, NULL );
 	pthread_join( thread_draw, NULL );
 	pthread_join( thread_scan, NULL );
+	pthread_join( thread_mouse, NULL );
 
    	return 0;
 
