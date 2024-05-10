@@ -89,8 +89,8 @@ volatile unsigned int *pio_write_address = NULL;
 volatile unsigned int *pio_cell_color    = NULL;
 
 ///////////////////////////////////////////////// 
-#define WIDTH 201
-#define HEIGHT 201
+#define WIDTH 301
+#define HEIGHT 301
 #define ALPHA 1.0
 #define BETA 0.8
 #define GAMMA 0.01
@@ -186,6 +186,8 @@ void initialize_grid() {
     // Set the center cell
     cells[(WIDTH -1 ) / 2 ][(HEIGHT -1 ) / 2].s = 1.0;
     cells[(WIDTH -1 ) / 2][(HEIGHT -1 ) / 2].is_receptive = true;
+	cells[10][10].s = 1.0;
+    cells[10][10].is_receptive = true;
 
 	// num_neighbors = get_num_neighbors(neighbors, 25, 25);
 
@@ -480,7 +482,7 @@ int main(void)
 	//VGA_text (34, 1, text_top_row);
 	//VGA_text (34, 2, text_bottom_row);
 	// clear the screen
-	// VGA_box (0, 0, 639, 479, 0xfc60);
+	// VGA_box (0, 0, 639, 479, 0x0000);
 	// VGA_box (0, 0, 639, 479, 0x1a);
 	initialize_grid();
 
@@ -526,36 +528,36 @@ int main(void)
                     //     }
                     // }
                 }
-                // else { // odd columns
-                //     if (cells[i][j].s >= 1) { // if frozen, do the cell mappings to m10k memory and set color
-                //         for (x = 0; x < 2; x++) {
-                //             for (y = 0; y < 2; y++) {
-                //                 // add some handshake here ?????????s
-                //                 // send the values over to be written to an m10k block? mapping is already done
-                //                 int cellx = (2*i)+x;
-                //                 int celly = (2*j)+y+1;
-				// 				VGA_disc(cellx, celly, 0, 0xff);
-                //                 // *pio_write_address = (640*celly)+cellx;
-                //                 // *pio_cell_color = 255;
+                else { // odd columns
+                    if (cells[i][j].s >= 1) { // if frozen, do the cell mappings to m10k memory and set color
+                        for (x = 0; x < 2; x++) {
+                            for (y = 0; y < 2; y++) {
+                                // add some handshake here ?????????s
+                                // send the values over to be written to an m10k block? mapping is already done
+                                int cellx = (2*i)+x;
+                                int celly = (2*j)+y+1;
+								VGA_disc(cellx, celly, 0, 0xffff);
+                                // *pio_write_address = (640*celly)+cellx;
+                                // *pio_cell_color = 255;
 
-                //             }
+                            }
                             
-                //         }
-                //     }
-                //     else {
-                //         for (x = 0; x < 2; x++) {
-                //             for (y = 0; y < 2; y++) {
-                //                 int cellx = (2*i)+x;
-                //                 int celly = (2*j)+y+1;
-				// 				VGA_disc(cellx, celly, 0, 0x00);
-                //                 // *pio_write_address = (640*celly)+cellx;
-                //                 // *pio_cell_color = 0;
+                        }
+                    }
+                    // else {
+                    //     for (x = 0; x < 2; x++) {
+                    //         for (y = 0; y < 2; y++) {
+                    //             int cellx = (2*i)+x;
+                    //             int celly = (2*j)+y+1;
+					// 			VGA_disc(cellx, celly, 0, 0x00);
+                    //             // *pio_write_address = (640*celly)+cellx;
+                    //             // *pio_cell_color = 0;
 
-                //             }
+                    //         }
                             
-                //         }
-                //     }
-                // }
+                    //     }
+                    // }
+                }
                 
             }
         }
