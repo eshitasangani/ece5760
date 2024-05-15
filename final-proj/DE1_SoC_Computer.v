@@ -428,6 +428,13 @@ reg  is_frozen_bottom; // store frozen val for the cell below us
 reg [18:0] is_frozen_y;
 reg 	   is_frozen_pio;
 
+// SRAM SIGNALS
+reg  [2:0] 	onchip_sram_s2_address;       
+reg 		onchip_sram_s2_write;     // write enable
+wire [31:0] onchip_sram_s2_readdata;  
+reg  [31:0] onchip_sram_s2_writedata; 
+// reg  [3:0]  onchip_sram_s2_byteenable;
+
 /*
 neighbor indexing: 
     even:
@@ -451,6 +458,7 @@ diffusion_solver curr_cell (
     .v_next       (v_next),
     .alpha        (alpha),
     .beta         (beta),
+	.clk		  (CLOCK_50),
       
     .u_next       (u_next_top),
     .is_frozen    (is_frozen)
@@ -500,20 +508,28 @@ always @(posedge CLOCK_50) begin
 		beta  <= pio_beta;
 		gamma <= pio_gamma;
 
+		// reset the synch signal
+		onchip_sram_s2_address <= 3'b000; // synch signal is the lowest bit
+		onchip_sram_s2_writedata <= 32'd0;
+		onchip_sram_s2_write <= 1'b1; 
+
         state  <= 5'd0;
     end
     else begin
         case (state)
-
             5'd0: begin // initialization
+				// reset the one iter signal
+				onchip_sram_s2_address <= 3'b001; // one iter signal is the second lowest word
+				onchip_sram_s2_writedata <= 32'd0;
+				onchip_sram_s2_write <= 1'b1; 
                 // SETTING INITIAL U AND V VALUES //
                 // only center node is frozen, set to 1
-                if (write_addr_u_curr == 19'd3) begin 
+                if (write_addr_u_curr == 19'd4) begin 
                     // on next cycle, it'll be the center node
                     write_data_u_curr <= 18'd0;
                     write_data_v_next <= 18'b01_0000000000000000 + gamma;
                 end
-                else if (write_addr_u_curr == 19'd2 || write_addr_u_curr == 19'd4) begin
+                else if (write_addr_u_curr == 19'd3 || write_addr_u_curr == 19'd5) begin
                     // the nodes around the center node are receptive, but not frozen 
                     write_data_u_curr <= 18'd0;
                     write_data_v_next <= beta + gamma;
@@ -525,7 +541,7 @@ always @(posedge CLOCK_50) begin
                 end
 
                 // MOVE FORWARD OR STOP //
-                if (write_addr_u_curr >= 19'd10) begin
+                if (write_addr_u_curr >= 19'd9) begin
                     state <= 5'd1;
                     write_addr_u_curr <= 19'd0;
                     write_addr_v_next <= 19'd0;
@@ -548,30 +564,38 @@ always @(posedge CLOCK_50) begin
                 u_curr            <= read_data_u_curr;
                 v_next            <= ((read_data_v_next + gamma) >= 18'b01_0000000000000000)? 18'b01_0000000000000000 : (read_data_v_next + gamma);
                 read_addr_u_curr  <= read_addr_u_curr + 19'd1;
+
+				onchip_sram_s2_address <= 3'b000; // synch signal is the lowest bit
+				onchip_sram_s2_write <= 1'b0; // read the synch signal
+
                 state             <= 5'd2;
             end
 
             5'd2: begin
                 // wait for next read to come back
-                state             <= 5'd3;
+                state                <= 5'd3;
             end
             5'd3: begin
                 // read from m10k for top neighbor
-                u_neighbor_t <= read_data_u_curr; 
+				u_neighbor_t <= read_data_u_curr; 
 
-                // increment these now, so we can read them a cycle earlier
-                read_addr_u_curr <= read_addr_u_curr + 19'd1;
-                read_addr_v_next <= read_addr_v_next + 19'd1;
+				// increment these now, so we can read them a cycle earlier
+				read_addr_u_curr <= read_addr_u_curr + 19'd1;
+				read_addr_v_next <= read_addr_v_next + 19'd1;
+				state             <= 5'd4;
 
-                state             <= 5'd4;
             end
             5'd4: begin
-				if (pio_done_send) begin // we have to wait for the hps to request the next value
+				if (onchip_sram_s2_readdata == 32'd1) begin // we have to wait for the hps to request the next value
 					// now we can use diffusion solver output
 					// store these outputs and then move up to calculate diffusion for the cell above us. 
 					is_frozen_reg <= is_frozen;
 					is_frozen_y   <= write_addr_u_curr;
 					is_frozen_pio <= is_frozen;
+
+					// reset the synch signal
+					onchip_sram_s2_writedata <= 32'd0;
+					onchip_sram_s2_write <= 1'b1; 
 
 					u_next_reg <= u_next_top; // u_next_top is solver output
 					v_next_reg <= v_next;                
@@ -586,53 +610,45 @@ always @(posedge CLOCK_50) begin
 				end
             end
             5'd5: begin // read m10k for the cell above us so we can calc diffusion for it
-				if (!pio_done_send) begin
-					// read from m10k for top neighbor
-					u_neighbor_t <= read_data_u_curr; 
+				// read from m10k for top neighbor
+				u_neighbor_t <= read_data_u_curr; 
 
-					// read from m10k for v_next
-					v_next            <= ((read_data_v_next + gamma) >= 18'b01_0000000000000000)? 18'b01_0000000000000000 : (read_data_v_next + gamma);
+				// read from m10k for v_next
+				v_next            <= ((read_data_v_next + gamma) >= 18'b01_0000000000000000)? 18'b01_0000000000000000 : (read_data_v_next + gamma);
 
-					// increment these now, so we can read them a cycle earlier
-					read_addr_u_curr <= read_addr_u_curr + 19'd1;
-					read_addr_v_next <= read_addr_v_next + 19'd1;
+				// increment these now, so we can read them a cycle earlier
+				read_addr_u_curr <= read_addr_u_curr + 19'd1;
+				read_addr_v_next <= read_addr_v_next + 19'd1;
 
-					state             <= 5'd6;
-				end
-				else begin
-					state <= 5'd5;
-				end
+				onchip_sram_s2_write <= 1'b0; // reading the synch signal 
+
+				state             <= 5'd6;
 
             end
             5'd6: begin
-				if (!pio_done_send) begin
-					// check if any neighbors are frozen
-					// eventually will have to also check r,l,rc,rl neighbors too but 
-					// right now r,l,rc,rl are edge cells so they are static
-					if (is_frozen_reg || is_frozen_bottom || is_frozen) begin
-						// if we or any neighbors are frozen, we are a receptive cell.
-						// write the new s=u+v value to v, write 0 to u
-						write_data_v_next <= v_next_reg + u_next_reg;
-						write_data_u_curr <= 18'd0;
-					end
-					else begin
-						// if us and none of our neighbors are frozen, we are a non-receptive cell
-						// write 0 to v, write the new s=u+v value to u
-						write_data_v_next <= 18'd0;
-						write_data_u_curr <= v_next_reg + u_next_reg;
-					end
-
-					write_en_u_curr <= 1'b1;
-					write_en_v_next <= 1'b1;
-
-					state <= 5'd7;
+				// check if any neighbors are frozen
+				// eventually will have to also check r,l,rc,rl neighbors too but 
+				// right now r,l,rc,rl are edge cells so they are static
+				if (is_frozen_reg || is_frozen_bottom || is_frozen) begin
+					// if we or any neighbors are frozen, we are a receptive cell.
+					// write the new s=u+v value to v, write 0 to u
+					write_data_v_next <= v_next_reg + u_next_reg;
+					write_data_u_curr <= 18'd0;
 				end
 				else begin
-					state <= 5'd6;
+					// if us and none of our neighbors are frozen, we are a non-receptive cell
+					// write 0 to v, write the new s=u+v value to u
+					write_data_v_next <= 18'd0;
+					write_data_u_curr <= v_next_reg + u_next_reg;
 				end
+
+				write_en_u_curr <= 1'b1;
+				write_en_v_next <= 1'b1;
+
+				state <= 5'd7;
             end
             5'd7: begin
-				if (pio_done_send) begin // we have to wait for the hps to request the next value
+				if (onchip_sram_s2_readdata == 32'd1) begin // we have to wait for the hps to request the next value
                 	// move up one cell!
 					u_neighbor_b <= u_curr;
 					u_curr       <= u_neighbor_t;
@@ -641,6 +657,10 @@ always @(posedge CLOCK_50) begin
 					is_frozen_reg    <= is_frozen;
 					is_frozen_y      <= write_addr_u_curr + 19'd1;
 					is_frozen_pio    <= is_frozen;
+
+					// reset the synch signal
+					onchip_sram_s2_writedata <= 32'd0;
+					onchip_sram_s2_write <= 1'b1; 
 
 					u_next_reg <= u_next_top;
 					v_next_reg <= v_next;
@@ -652,12 +672,12 @@ always @(posedge CLOCK_50) begin
 					v_next <= (read_addr_v_next >= 19'd10) ? 18'd0 : (((read_data_v_next + gamma) >= 18'b01_0000000000000000)? 18'b01_0000000000000000 : (read_data_v_next + gamma)); // consider top edge boundary
 
 					// incr write addresses
-					if (write_addr_u_curr >= 19'd10) begin
+					if (write_addr_u_curr >= 19'd9) begin // we are at the top of the column
 						write_addr_u_curr <= 19'd0;
 						write_addr_v_next <= 19'd0;
 						read_addr_u_curr  <= 19'd0;
 						read_addr_v_next  <= 19'd0;
-						state <= 5'd8;
+						state <= 5'd10;
 					end
 					else begin
 						write_addr_u_curr <= write_addr_u_curr + 19'd1;
@@ -666,7 +686,7 @@ always @(posedge CLOCK_50) begin
 						// consider top edge boundary: make sure we're not trying to read nonexistent data from m10ks
 						read_addr_u_curr  <= (read_addr_u_curr >= 19'd10) ? read_addr_u_curr : (read_addr_u_curr + 19'd1);
 						read_addr_v_next  <= (read_addr_v_next >= 19'd10) ? read_addr_v_next : (read_addr_v_next + 19'd1);
-						state             <= 5'd6;
+						state             <= 5'd8;
 					end
 					write_en_u_curr <= 1'b0;
 					write_en_v_next <= 1'b0;
@@ -675,14 +695,20 @@ always @(posedge CLOCK_50) begin
 					state <= 5'd7;
 				end
             end
+			5'd8: begin
+				onchip_sram_s2_address <= 3'b000; // synch signal is the lowest bit
+				onchip_sram_s2_write <= 1'b0; // read the synch signal
+				state <= 5'd6;
+			end
+			// 5'd9: begin // wait state for reading the sram
+			// 	state <= 5'd6;
+			// end
 
-            5'd8: begin // this is a wait state so we can get our read data at the bottom in state 1 
-				if (!pio_done_send) begin
-                	state <= 5'd1;
-				end
-				else begin
-					state <= 5'd8;
-				end
+            5'd10: begin // this is a wait state so we can get our read data at the bottom in state 1 
+				onchip_sram_s2_address <= 3'b001; // synch signal is the lowest bit
+				onchip_sram_s2_writedata <= 32'd1; // this is our one iteration signal
+				onchip_sram_s2_write <= 1'b1; 
+				state <= 5'd1;
             end
 
         endcase
@@ -842,7 +868,16 @@ Computer_System The_System (
 	.is_frozen_pio_external_connection_export      (is_frozen_pio),        //        is_frozen_x_external_connection.export
 	.pio_gamma_external_connection_export          (pio_gamma),          //          pio_gamma_external_connection.export
 	.pio_beta_external_connection_export           (pio_beta),           //           pio_beta_external_connection.export
-	.pio_alpha_external_connection_export          (pio_alpha)           //          pio_alpha_external_connection.export
+	.pio_alpha_external_connection_export          (pio_alpha),           //          pio_alpha_external_connection.export
+
+	// on chip sram
+	.onchip_sram_s2_address                        (onchip_sram_s2_address),                        //                         onchip_sram_s2.address
+	.onchip_sram_s2_chipselect                     (1'b1),                     //                                       .chipselect
+	.onchip_sram_s2_clken                          (1'b1),                          //                                       .clken
+	.onchip_sram_s2_write                          (onchip_sram_s2_write),                          //                                       .write
+	.onchip_sram_s2_readdata                       (onchip_sram_s2_readdata),                       //                                       .readdata
+	.onchip_sram_s2_writedata                      (onchip_sram_s2_writedata),                      //                                       .writedata
+	.onchip_sram_s2_byteenable                     (4'b1111)   //we only want lowest 2 bytes for our synch bit and our one iteration bit
 );
 
 endmodule
@@ -866,9 +901,11 @@ module diffusion_solver (
     input  wire signed [17:0] alpha,
     input  wire signed [17:0] beta,
 
+	input  wire				  clk,
+
     output wire signed [17:0] u_next,
 
-    output wire        is_frozen
+    output reg        is_frozen
 );
 
     wire signed [17:0] u_avg_0;
@@ -877,31 +914,34 @@ module diffusion_solver (
     wire signed [17:0] laplace_out;
     wire signed [17:0] u_next_tmp;
 
-    // s = u + v
-    // frozen if s >= 1
-    assign is_frozen = ((u_next + v_next) >= 18'b01_0000000000000000);
-    assign u_next_tmp = (u_curr + laplace_out); 
-    assign u_next = (u_next_tmp >= 18'b01_0000000000000000) ? 18'b01_0000000000000000 : u_next_tmp;
+	always @(posedge clk) begin
 
-    signed_mult u_avg_calc0 ( // divide by 6 (num neighbors) -- mult by 1/6
-        .out(u_avg_0),
-        .a  (u_neighbor_0+u_neighbor_1+u_neighbor_2),
-        .b  (18'b00_0010101010101010) // 1/6
-    );
+		// s = u + v
+		// frozen if s >= 1
+		is_frozen 	<= ((u_next + v_next) >= 18'b01_0000000000000000);
+	end
+	assign u_next_tmp	= (u_curr + laplace_out); 
+	assign u_next 		= (u_next_tmp >= 18'b01_0000000000000000) ? 18'b01_0000000000000000 : u_next_tmp;
 
-    signed_mult u_avg_calc1 ( // divide by 6 (num neighbors) -- mult by 1/6
-        .out(u_avg_1),
-        .a  (u_neighbor_3+u_neighbor_4+u_neighbor_5),
-        .b  (18'b00_0010101010101010) // 1/6
-    );
+		signed_mult u_avg_calc0 ( // divide by 6 (num neighbors) -- mult by 1/6
+			.out(u_avg_0),
+			.a  (u_neighbor_0+u_neighbor_1+u_neighbor_2),
+			.b  (18'b00_0010101010101010) // 1/6
+		);
 
-    assign u_avg_total = u_avg_0 + u_avg_1;
+		signed_mult u_avg_calc1 ( // divide by 6 (num neighbors) -- mult by 1/6
+			.out(u_avg_1),
+			.a  (u_neighbor_3+u_neighbor_4+u_neighbor_5),
+			.b  (18'b00_0010101010101010) // 1/6
+		);
 
-    signed_mult laplace_calc ( // alpha / 2 * (u_avg - cell.u)
-        .out(laplace_out),
-        .a  (alpha >>> 1),
-        .b  (u_avg_total - u_curr)
-    );
+		assign u_avg_total = u_avg_0 + u_avg_1;
+
+		signed_mult laplace_calc ( // alpha / 2 * (u_avg - cell.u)
+			.out(laplace_out),
+			.a  (alpha >>> 1),
+			.b  (u_avg_total - u_curr)
+		);
 
 endmodule
 
