@@ -54,6 +54,11 @@ typedef signed int fix28 ;
 #define SIXTEENTHfix28 0x01000000
 #define ONEfix28 0x10000000
 
+// measure time
+struct timeval t1, t2;
+double elapsed_time;
+
+
 // the light weight buss base
 void *h2p_lw_virtual_base;
 
@@ -106,10 +111,6 @@ volatile unsigned int *pio_reset_to_hps = NULL;
 #define gray (15+(31<<5)+(51<<11))
 #define white (0xffff)
 
-// #define ALPHA 1.0
-// #define BETA 0.8
-// #define GAMMA 0.01
-
 #define NUM_NEIGHBORS 6
 
 typedef struct {
@@ -147,6 +148,7 @@ int set;
 int init_reset;
 int reset_beta = 0;
 int paused = 0; 
+// char pick_color[10];
 
 // Get neighbors for a specific coordinate
 int get_num_neighbors(Cell* neighbors[], int x, int y) {
@@ -214,27 +216,27 @@ void initialize_grid() {
         }
     }
     // Set the center cell
-    cells[ (WIDTH - 1 ) / 8 ] [ (HEIGHT - 1 ) / 8].s = 1.0;
-    cells[ (WIDTH - 1 ) / 8 ] [ (HEIGHT - 1 ) / 8].is_receptive = true;
+    cells[ (WIDTH - 1 ) / 4 ] [ (HEIGHT - 1 ) / 4].s = 1.0;
+    cells[ (WIDTH - 1 ) / 4 ] [ (HEIGHT - 1 ) / 4].is_receptive = true;
 
-	cells[ (WIDTH - 1 ) / 4 ] [ 3 * (HEIGHT - 1 ) / 16].s = 1.0;
-    cells[ (WIDTH - 1 ) / 4 ] [ 3 * (HEIGHT - 1 ) / 16].is_receptive = true;
+	// cells[ (WIDTH - 1 ) / 4 ] [ 3 * (HEIGHT - 1 ) / 16].s = 1.0;
+    // cells[ (WIDTH - 1 ) / 4 ] [ 3 * (HEIGHT - 1 ) / 16].is_receptive = true;
 
-	cells[ 6 * (WIDTH - 1 ) / 16 ] [ (HEIGHT - 1 ) / 8].s = 1.0;
-    cells[ 6 * (WIDTH - 1 ) / 16 ] [ (HEIGHT - 1 ) / 8].is_receptive = true;
+	// cells[ 6 * (WIDTH - 1 ) / 16 ] [ (HEIGHT - 1 ) / 8].s = 1.0;
+    // cells[ 6 * (WIDTH - 1 ) / 16 ] [ (HEIGHT - 1 ) / 8].is_receptive = true;
 
 
-	cells[ 6 * (WIDTH - 1 ) / 16 ] [ 6 * (HEIGHT - 1 ) / 16].s = 1.0;
-    cells[ 6 * (WIDTH - 1 ) / 16 ] [ 6 * (HEIGHT - 1 ) / 16].is_receptive = true;
+	// cells[ 6 * (WIDTH - 1 ) / 16 ] [ 6 * (HEIGHT - 1 ) / 16].s = 1.0;
+    // cells[ 6 * (WIDTH - 1 ) / 16 ] [ 6 * (HEIGHT - 1 ) / 16].is_receptive = true;
 
-	cells[ (WIDTH - 1 ) / 4 ] [ 5 * (HEIGHT - 1 ) / 16].s = 1.0;
-    cells[ (WIDTH - 1 ) / 4 ] [ 5 * (HEIGHT - 1 ) / 16].is_receptive = true;
+	// cells[ (WIDTH - 1 ) / 4 ] [ 5 * (HEIGHT - 1 ) / 16].s = 1.0;
+    // cells[ (WIDTH - 1 ) / 4 ] [ 5 * (HEIGHT - 1 ) / 16].is_receptive = true;
 
-	cells[ 6 * (WIDTH - 1 ) / 16] [ 6 * (HEIGHT - 1 ) / 16].s = 1.0;
-    cells[ 6 * (WIDTH - 1 ) / 16] [ 6 * (HEIGHT - 1 ) / 16].is_receptive = true;
+	// cells[ 6 * (WIDTH - 1 ) / 16] [ 6 * (HEIGHT - 1 ) / 16].s = 1.0;
+    // cells[ 6 * (WIDTH - 1 ) / 16] [ 6 * (HEIGHT - 1 ) / 16].is_receptive = true;
 
-	cells[  (WIDTH - 1 ) / 8] [ 6 * (HEIGHT - 1 ) / 16].s = 1.0;
-    cells[  (WIDTH - 1 ) / 8] [ 6 * (HEIGHT - 1 ) / 16].is_receptive = true;
+	// cells[  (WIDTH - 1 ) / 8] [ 6 * (HEIGHT - 1 ) / 16].s = 1.0;
+    // cells[  (WIDTH - 1 ) / 8] [ 6 * (HEIGHT - 1 ) / 16].is_receptive = true;
 
 	// cells[ (WIDTH - 1 ) / 6 ] [ (HEIGHT - 1 ) / 6].s = 1.0;
     // cells[ (WIDTH - 1 ) / 6 ] [ (HEIGHT - 1 ) / 6].is_receptive = true;
@@ -268,6 +270,9 @@ void * reset_thread() {
 		{ 
 			// VGA_box (0, 0, 639, 479, 0x0000);
 			init_reset = 1;
+			init_alpha = 1.0;
+			init_beta = 0.8;
+			init_gamma = 0.01;
 		}
 
 	}
@@ -285,7 +290,7 @@ void * scan_thread () {
 	while (1) { 
 		// which category to change
 
-		printf("0: alpha, 1: beta, 2: gamma, 3: new seed, 4: pause, 5: clear -- ");
+		printf("0: alpha, 1: beta, 2: gamma, 3: new seed, 4: pause, 5: color, 6: print time, 7: clear -- ");
     	scanf("%i", &set);
 
 		switch ( set ) {
@@ -294,14 +299,12 @@ void * scan_thread () {
 
 				printf("Enter alpha: ");
 				scanf("%f", &init_alpha);
-				// color -= 4;
 			
 			break;
 
 			case 1:  // changing beta 
 
 				printf("Enter beta: ");
-				// old_beta = init_beta;
 				scanf("%f", &init_beta);
 				
 			break; 
@@ -310,7 +313,6 @@ void * scan_thread () {
 
 				printf("Enter gamma: ");
 				scanf("%f", &init_gamma);
-				// color -= 4;
 
 			break; 
 
@@ -330,12 +332,40 @@ void * scan_thread () {
 				printf("Pause/Play: ");
 				scanf("%i", &paused);
 			break;
+
+			case 5:  // setting color 
+
+				printf("Choose Color: ");
+				scanf("%x", &color);
+				// pick_color[strcspn(pick_color, "\r")] = 0;
+				// pick_color[strcspn(pick_color, "\n")] = 0;
+
+				// if (!strcmp(&pick_color, "red")) { 
+				// 	color = red;
+				// }
+
+			break;
+
+			case 6:
+				// printf("Print time: ");
+				printf("\ntime per iteration: %.2f ms \n", elapsed_time);
+				// pick_color[strcspn(pick_color, "\r")] = 0;
+				// pick_color[strcspn(pick_color, "\n")] = 0;
+
+				// if (!strcmp(&pick_color, "red")) { 
+				// 	color = red;
+				// }
+
+			break;
 			
 
-			case 5: // clear screen 
+			case 7: // clear screen 
 				// VGA_box (0, 0, 639, 479, 0x0000);
 				// color = 0xffff;
 				init_reset = 1;
+				init_alpha = 1.0;
+				init_beta = 0.8;
+				init_gamma = 0.01;
 
 			break;
 
@@ -429,6 +459,7 @@ void * draw_thread () {
 		// 	return 1;
 		// }
 		
+		
 		if (init_reset) { 
 			init_reset = 0;
 			VGA_box (0, 0, 639, 479, 0x0000);
@@ -442,6 +473,8 @@ void * draw_thread () {
 		}
 
 		if (paused == 0){
+			gettimeofday(&t1, NULL);
+
 			one_iter(); // does the actual calculation 
 			for (i = 0; i < WIDTH; i++) {
 				for (j = 0; j < HEIGHT; j++) {
@@ -564,10 +597,15 @@ void * draw_thread () {
 				} // end height for
 			} // end width for
 
-			
+			gettimeofday(&t2, NULL);
 
 			iters++;
 		}
+		
+		elapsed_time = (t2.tv_sec - t1.tv_sec) * 1000000.0;      // sec to us
+		elapsed_time += (t2.tv_usec - t1.tv_usec) ;   // us 
+		elapsed_time = elapsed_time * 0.001;
+		// printf("\ntime per iteration: %.2f ms ", elapsed_time);
 
 		
 	} // end while
