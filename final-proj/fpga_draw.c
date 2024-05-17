@@ -609,60 +609,6 @@ void * draw_thread () {
 
 		
 	} // end while
-	// for (x = 0; x < 145; x++) { 
-
-	// 	if (!paused) {  // if paused is 0 = means we can continue calculating and drawing 
-
-	// 		if (init_reset) { 
-	// 			initialize_grid();
-	// 		}
-
-	// 		else { 
-	// 			one_iter(); // does the actual calculation 
-	// 			for (i = 0; i < WIDTH; i++) {
-	// 				for (j = 0; j < HEIGHT; j++) {
-	// 					int count = 0;
-
-	// 					if (i % 2 == 0) { // even columns 
-	// 						if (cells[i][j].s >= 1) { 
-	// 							for (x = 0; x < 2; x++) {
-	// 								for (y = 0; y < 2; y++) {
-
-	// 									int cellx = (2*i)+x;
-	// 									int celly = (2*j)+y;
-	// 									VGA_disc(cellx, celly, 0, 0xffff);
-
-	// 								}
-	// 							}
-	// 						}
-
-	// 					}
-	// 					else { // odd columns
-	// 						if (cells[i][j].s >= 1) { 
-	// 							for (x = 0; x < 2; x++) {
-	// 								for (y = 0; y < 2; y++) {
-	// 									int cellx = (2*i)+x;
-	// 									int celly = (2*j)+y+1;
-	// 									VGA_disc(cellx, celly, 0, 0xffff);
-
-	// 								}
-									
-	// 							}
-	// 						}
-
-	// 					}
-						
-	// 				}
-	// 			}
-
-	// 		}
-
-	// 	}
-	// 	else { 
-	// 		while (paused) {};
-	// 	}
-        
-    // }
 
 }
 
